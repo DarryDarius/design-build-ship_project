@@ -144,7 +144,7 @@ function showResults() {
     const top = document.createElement('span'); top.className = 'option-top'; top.textContent = `POSSIBILITY ${String(i + 1).padStart(2, '0')}`;
     const title = document.createElement('span'); title.className = 'option-title'; title.textContent = p.title;
     const facts = document.createElement('span'); facts.className = 'option-facts';
-    for (const [label, value] of [['Keep', p.kept.map(t => t.title).join(', ') || 'The essentials'], ['Later', p.deferred.map(t => t.title).join(', ') || 'Nothing else']]) {
+    for (const [label, value] of [['Keep', [...p.required, ...p.kept].map(t => t.title).join(', ') || 'No remaining tasks'], ['Later', p.deferred.map(t => t.title).join(', ') || 'Nothing else']]) {
       const item = document.createElement('span'), strong = document.createElement('strong'); strong.textContent = label; item.append(strong, document.createTextNode(value)); facts.append(item);
     }
     const bottom = document.createElement('span'); bottom.className = 'option-bottom'; bottom.textContent = `${p.open} min total open · ${p.required.length} must-do task${p.required.length === 1 ? '' : 's'}`;
@@ -162,8 +162,76 @@ function showConfirmed() {
   $('#confirmed-title').textContent = confirmed.plan.title;
   $('#confirmed-summary').textContent = planLabel(confirmed.plan);
   timeline($('#confirmed-timeline'), confirmed.plan.blocks);
+  $('#quick-panel').hidden = true;
+  $('#quick-error').hidden = true;
   show('confirmed');
 }
+
+function quickReplan(delay = 0, finishedId = null) {
+  const next = copy(confirmed.input);
+  const delayedStart = minutes(next.start) + delay;
+  next.start = clock(next.sample ? delayedStart : Math.max(delayedStart, minutes(nextQuarter())));
+  if (finishedId && !next.completed.includes(finishedId)) next.completed.push(finishedId);
+  try {
+    const nextDraft = buildPlans(next);
+    input = next;
+    draft = nextDraft;
+    selected = 0;
+    compareToConfirmed = true;
+    editingAfterConfirm = true;
+    showResults();
+  } catch (error) {
+    const box = $('#quick-error');
+    box.textContent = `${error.message} Use Edit details to adjust your day.`;
+    box.hidden = false;
+  }
+}
+
+function editChangedDay(addTask = false) {
+  input = copy(confirmed.input);
+  compareToConfirmed = true;
+  editingAfterConfirm = true;
+  const now = nextQuarter();
+  if (!input.sample && minutes(now) > minutes(input.start) && minutes(now) < minutes(input.end)) input.start = now;
+  if (addTask) {
+    if (input.tasks.length >= 5) {
+      const box = $('#quick-error'); box.textContent = 'This plan already has five tasks. Edit or remove a task before adding another.'; box.hidden = false; return;
+    }
+    input.tasks.push({ id: uid(), title: '', duration: 45, required: false });
+  }
+  edit();
+  if (addTask) $('#task-list .task-row:last-child input[type=text]')?.focus();
+}
+
+function makeQuickPanel() {
+  const panel = document.createElement('section');
+  panel.id = 'quick-panel'; panel.className = 'quick-panel'; panel.hidden = true;
+  const heading = document.createElement('h3'); heading.textContent = 'What changed?';
+  const hint = document.createElement('p'); hint.className = 'hint';
+  hint.textContent = 'Move your saved start later, or use the current time if it has already passed. Your confirmed plan stays saved.';
+  const label = document.createElement('p'); label.className = 'quick-label'; label.textContent = 'I lost more time';
+  const delays = document.createElement('div'); delays.className = 'quick-actions';
+  for (const n of [30, 45, 60]) delays.append(action(`${n} min`, `Move saved start ${n} minutes later and compare`, () => quickReplan(n), 'quick-button'));
+  const finished = document.createElement('div'); finished.id = 'quick-finished';
+  const error = document.createElement('p'); error.id = 'quick-error'; error.className = 'error-box'; error.setAttribute('role', 'alert'); error.hidden = true;
+  const addButton = action('+ Add a task', 'Add a task to the new draft', () => editChangedDay(true), 'quick-button');
+  const editButton = action('Edit details →', 'Edit details', () => editChangedDay(), 'inline-button');
+  panel.append(heading, hint, label, delays, finished, addButton, error, editButton);
+  $('#replan').closest('.stack-actions').after(panel);
+}
+
+function renderQuickFinished() {
+  const host = $('#quick-finished'); host.replaceChildren();
+  const scheduled = new Set(confirmed.plan.blocks.filter(b => b.kind === 'task').map(b => b.id));
+  const tasks = confirmed.input.tasks.filter(t => scheduled.has(t.id) && !confirmed.input.completed.includes(t.id));
+  if (!tasks.length) return;
+  const label = document.createElement('p'); label.className = 'quick-label'; label.textContent = 'I finished a task'; host.append(label);
+  const row = document.createElement('div'); row.className = 'quick-actions';
+  for (const task of tasks) row.append(action(task.title, `Mark ${task.title} finished and compare`, () => quickReplan(0, task.id), 'quick-button'));
+  host.append(row);
+}
+
+makeQuickPanel();
 
 $('#start-own').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
 $('#start-demo').addEventListener('click', () => { input = sample(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
@@ -202,11 +270,10 @@ $('#confirm-dialog').addEventListener('close', () => {
   confirmed = value; editingAfterConfirm = false; showConfirmed();
 });
 $('#replan').addEventListener('click', () => {
-  input = copy(confirmed.input);
-  compareToConfirmed = true;
-  const now = nextQuarter();
-  if (minutes(now) > minutes(input.start) && minutes(now) < minutes(input.end)) input.start = now;
-  editingAfterConfirm = true; edit();
+  renderQuickFinished();
+  const panel = $('#quick-panel'); panel.hidden = !panel.hidden;
+  $('#quick-error').hidden = true;
+  if (!panel.hidden) panel.querySelector('.quick-button')?.focus();
 });
 $('#view-alternatives').addEventListener('click', () => { input = copy(confirmed.input); compareToConfirmed = true; draft = buildPlans(input); selected = draft.plans.findIndex(p => p.title === confirmed.plan.title); if (selected < 0) selected = 0; showResults(); });
 $('#new-day').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });

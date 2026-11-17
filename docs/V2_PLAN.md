@@ -1,9 +1,17 @@
 # v2 plan
 
-Status: **pending real user trials**. Do not present hypotheses below as observations.
+Status: **provisional**. One participant reported a desktop trial; participant identity and date were not provided. Validate priorities with more target users and a real phone before treating this as a complete research finding. The first three issues have been repaired in the v1 follow-up; the remaining rows are proposed v2 work.
 
-| Observed behavior or exact quote | Problem | v2 change | Why now | How to check |
-| --- | --- | --- | --- | --- |
-| Fill after a real trial | Fill after a real trial | Fill after a real trial | Fill after a real trial | Fill after a real trial |
+| Priority | Evidence from participant 1 | Change | Status and acceptance check |
+| --- | --- | --- | --- |
+| P0 | “如果只改一个地方，我会优先改 Something changed。” Returning to the full form required re-entering the consequence of a disruption. | On the confirmed plan, open quick choices for 30, 45, or 60 minutes lost; a finished-task shortcut; and an edit-details path for other changes. The shortcut goes straight to comparison and retains the old confirmation until a new one is confirmed. | **Implemented after trial.** With a saved sample, **Something changed → 45 min** should show updated cards without entering the form. Refresh before reconfirming should still show the old saved plan. |
+| P0 | The comparison header and explanation occupied much of the first screen. | Reduce comparison-page heading size and top spacing so options and schedule appear sooner. | **Implemented after trial.** Check desktop viewport and phone viewport visually; ask the next participant where they first look. |
+| P1 | The **Fit everything in** card's KEEP area listed Reading but omitted required Interview preparation. | List must-do and optional scheduled tasks together on every card. | **Implemented after trial.** For every option, verify each required task is named on its card and actually appears on its timeline. |
+| P1 | “60 分钟空闲” did not identify an open interval or whether it was fragmented. | Show open intervals in the timeline and state the longest continuous open block alongside total open time. | **Proposed v2.** Compare displayed intervals with actual gaps between scheduled blocks; test zero, one, and several gaps. |
+| P1 | Checking task completion required opening **Something changed**. | Add an actual-completion control on the confirmed plan, then make status persist independently from the chosen schedule. | **Proposed v2.** Mark a task finished, refresh, and verify the status remains; a replan must exclude it without changing the confirmed schedule before confirmation. |
+| P2 | Reading and similar tasks needed one uninterrupted block. | Let the user choose whether a task may be split and specify its shortest useful block. | **Proposed v2.** Confirm that contiguous-only tasks remain contiguous and that split parts each satisfy the minimum; show the parts plainly in the timeline. |
+| P1 | Participant requested a quick “新增一件事” route. | Provide an add-task shortcut on the confirmed plan that opens a focused task entry. | **Partly addressed:** **+ Add a task** creates a task and focuses its name in the existing editor. Test whether that is quick enough; if not, build an inline entry in v2. |
 
-Potential ideas to evaluate after the trials: simpler input, clearer trade-off wording, split tasks or partial progress, another interruption type, account-based cross-device save, and a comparison with the previous confirmed day. Prioritize only after observing real people use v1.
+## Next trial
+
+Give the participant a real disrupted day and ask them to choose and revise without coaching. Record the time and actions from opening **Something changed** to seeing new choices. Check whether “lost 45 minutes” means starting 45 minutes later from now or losing 45 minutes elsewhere in the window. Ask them to identify every must-do task on a card. Test on a phone as well as desktop. Add exact observations to [USER_TRIALS.md](USER_TRIALS.md) before changing priority or declaring the v2 plan final.
