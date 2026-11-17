@@ -152,7 +152,7 @@ $('#confirm-dialog').addEventListener('close', () => {
   confirmed = value; editingAfterConfirm = false; showConfirmed();
 });
 $('#replan').addEventListener('click', () => {
-  input = copy(confirmed.input); input.completed = [];
+  input = copy(confirmed.input);
   const now = nextQuarter();
   if (minutes(now) > minutes(input.start) && minutes(now) < minutes(input.end)) input.start = now;
   editingAfterConfirm = true; edit();

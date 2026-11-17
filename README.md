@@ -4,6 +4,8 @@ When a student's day changes, Parallel Days shows feasible ways to use the time 
 
 ## Try it
 
+**Live:** https://project-darius-e0cc.vercel.app
+
 Open the published site, choose **Use my remaining day** or **Try a sample day**, enter a window, fixed commitments, protected time, and two to five tasks. Compare the possibilities, confirm one, then use **Something changed** to replan after another delay. Tasks are scheduled, never marked completed automatically. Confirmed plans are saved only in this browser.
 
 The sample is fictional. Accounts, calendar sync, notifications, AI, and cross-device storage are outside v1. The earlier proposal is preserved at [`proposal/index.html`](proposal/index.html). This scope change lets v1 test the decision flow directly.
@@ -22,3 +24,5 @@ Visit `http://localhost:8000`. The root page is the app. The scheduling engine l
 ## Status and submission
 
 The [execution plan](V1_EXECUTION_PLAN.md) contains the product scope, acceptance criteria, and trial script. The [trial notes template](docs/USER_TRIALS.md) must be filled from actual target users; automated checks and the fictional sample are not user research. The [v2 plan template](docs/V2_PLAN.md) must be completed from those observations before class submission. Run `/security-review` in a client that supports it before shipping. No `.env` file is needed for this static app; the repository includes an agent deny rule and Git ignore rules for one if added later.
+
+Vercel published the current version via CLI. Its GitHub auto-deploy connection was rejected by Vercel, so deploy later changes manually with `npx vercel deploy --prod` until that account integration is fixed.
