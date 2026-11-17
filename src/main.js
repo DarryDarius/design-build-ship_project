@@ -10,7 +10,7 @@ const fresh = () => { const start = nextQuarter(); return { day: localDay(), sta
 const sample = () => ({ day: localDay(), start: '14:45', end: '18:00', fixed: [{ id: uid(), title: 'Class', start: '16:00', end: '16:30' }], protected: [], tasks: [
   { id: uid(), title: 'Assignment', duration: 45, required: true }, { id: uid(), title: 'Project draft', duration: 90, required: false }, { id: uid(), title: 'Reading', duration: 60, required: false },
 ], completed: [], sample: true });
-let input = fresh(), confirmed = null, draft = null, selected = 0, editingAfterConfirm = false;
+let input = fresh(), confirmed = null, draft = null, selected = 0, editingAfterConfirm = false, compareToConfirmed = false;
 
 function load() {
   try {
@@ -98,7 +98,7 @@ function edit() {
   renderRows(); show('editor');
 }
 function planLabel(plan) {
-  return `Keep ${plan.kept.length ? plan.kept.map(t => t.title).join(', ') : 'the essentials'} · Defer ${plan.deferred.length ? plan.deferred.map(t => t.title).join(', ') : 'nothing'} · ${plan.open} minutes open.`;
+  return `Keep ${plan.kept.length ? plan.kept.map(t => t.title).join(', ') : 'the essentials'} · Defer ${plan.deferred.length ? plan.deferred.map(t => t.title).join(', ') : 'nothing'} · ${plan.open} minutes total open.`;
 }
 function renderPrior(plan) {
   let banner = $('#prior-plan-banner');
@@ -108,8 +108,10 @@ function renderPrior(plan) {
   if (!difference) { difference = document.createElement('p'); difference.id = 'detail-change'; difference.className = 'notice'; $('#detail-summary').after(difference); }
   difference.hidden = !confirmed;
   if (!confirmed) return;
-  banner.append(document.createTextNode(`New draft. “${confirmed.plan.title}” remains your confirmed plan until you choose again. `));
+  banner.append(document.createTextNode(compareToConfirmed ? `New draft. “${confirmed.plan.title}” remains your confirmed plan until you choose again. ` : 'A new day draft. Your previous plan stays saved until you choose this one. '));
   const back = action('View confirmed plan', 'View confirmed plan', showConfirmed, 'inline-button'); banner.append(back);
+  difference.hidden = !compareToConfirmed;
+  if (!compareToConfirmed) return;
   const old = new Map(confirmed.plan.blocks.filter(b => b.kind === 'task').map(b => [b.id, b]));
   const next = new Map(plan.blocks.filter(b => b.kind === 'task').map(b => [b.id, b]));
   const done = new Set(input.completed || []);
@@ -134,7 +136,8 @@ function showResults() {
   if (!draft) return edit();
   $('#results-notice').hidden = !draft.impossible.length;
   if (draft.impossible.length) showNotice(`Cannot fit today: ${draft.impossible.join(', ')}. They remain deferred in every option.`);
-  $('#results-lead').textContent = draft.plans.length === 1 ? 'Only one meaningfully different arrangement fits these constraints.' : `${draft.available} usable minutes remain. Compare what each choice keeps and lets wait.`;
+  const common = draft.plans[0].required.map(t => t.title);
+  $('#results-lead').textContent = (draft.plans.length === 1 ? 'Only one meaningfully different arrangement fits these constraints.' : `${draft.available} usable minutes remain. Compare what each choice keeps and lets wait.`) + (common.length ? ` Every option includes your must-do work: ${common.join(', ')}.` : '');
   const host = $('#option-list'); host.replaceChildren();
   draft.plans.forEach((p, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'option-card'; b.setAttribute('aria-pressed', String(i === selected));
@@ -144,7 +147,7 @@ function showResults() {
     for (const [label, value] of [['Keep', p.kept.map(t => t.title).join(', ') || 'The essentials'], ['Later', p.deferred.map(t => t.title).join(', ') || 'Nothing else']]) {
       const item = document.createElement('span'), strong = document.createElement('strong'); strong.textContent = label; item.append(strong, document.createTextNode(value)); facts.append(item);
     }
-    const bottom = document.createElement('span'); bottom.className = 'option-bottom'; bottom.textContent = `${p.open} min open · ${p.required.length} must-do task${p.required.length === 1 ? '' : 's'}`;
+    const bottom = document.createElement('span'); bottom.className = 'option-bottom'; bottom.textContent = `${p.open} min total open · ${p.required.length} must-do task${p.required.length === 1 ? '' : 's'}`;
     b.append(top, title, facts, bottom); b.addEventListener('click', () => { selected = i; showResults(); host.children[i].focus({ preventScroll: true }); }); host.append(b);
   });
   const p = draft.plans[selected] || draft.plans[0]; $('#detail-title').textContent = p.title; $('#detail-summary').textContent = planLabel(p); timeline($('#timeline'), p.blocks);
@@ -162,9 +165,9 @@ function showConfirmed() {
   show('confirmed');
 }
 
-$('#start-own').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; edit(); });
-$('#start-demo').addEventListener('click', () => { input = sample(); editingAfterConfirm = false; edit(); });
-$('#clear-sample').addEventListener('click', () => { input = fresh(); edit(); });
+$('#start-own').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
+$('#start-demo').addEventListener('click', () => { input = sample(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
+$('#clear-sample').addEventListener('click', () => { input = fresh(); compareToConfirmed = false; edit(); });
 $('#start-time').addEventListener('input', () => { input.start = $('#start-time').value; });
 $('#end-time').addEventListener('input', () => { input.end = $('#end-time').value; });
 $('#back-home').addEventListener('click', () => confirmed ? showConfirmed() : show('intro'));
@@ -200,10 +203,11 @@ $('#confirm-dialog').addEventListener('close', () => {
 });
 $('#replan').addEventListener('click', () => {
   input = copy(confirmed.input);
+  compareToConfirmed = true;
   const now = nextQuarter();
   if (minutes(now) > minutes(input.start) && minutes(now) < minutes(input.end)) input.start = now;
   editingAfterConfirm = true; edit();
 });
-$('#view-alternatives').addEventListener('click', () => { input = copy(confirmed.input); draft = buildPlans(input); selected = draft.plans.findIndex(p => p.title === confirmed.plan.title); if (selected < 0) selected = 0; showResults(); });
-$('#new-day').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; edit(); });
+$('#view-alternatives').addEventListener('click', () => { input = copy(confirmed.input); compareToConfirmed = true; draft = buildPlans(input); selected = draft.plans.findIndex(p => p.title === confirmed.plan.title); if (selected < 0) selected = 0; showResults(); });
+$('#new-day').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
 load();
