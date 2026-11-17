@@ -4,9 +4,10 @@ const $ = (s) => document.querySelector(s);
 const key = 'parallel-days-v1';
 const copy = (x) => structuredClone(x);
 const uid = () => crypto.randomUUID();
+const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const nextQuarter = () => { const d = new Date(); return clock(Math.min(1425, Math.ceil((d.getHours() * 60 + d.getMinutes()) / 15) * 15)); };
-const fresh = () => { const start = nextQuarter(); return { start, end: clock(Math.min(1425, minutes(start) + 180)), fixed: [], protected: [], tasks: [{ id: uid(), title: '', duration: 45, required: true }], completed: [], sample: false }; };
-const sample = () => ({ start: '14:45', end: '18:00', fixed: [{ id: uid(), title: 'Class', start: '16:00', end: '16:30' }], protected: [], tasks: [
+const fresh = () => { const start = nextQuarter(); return { day: localDay(), start, end: clock(Math.min(1425, minutes(start) + 180)), fixed: [], protected: [], tasks: [{ id: uid(), title: '', duration: 45, required: true }], completed: [], sample: false }; };
+const sample = () => ({ day: localDay(), start: '14:45', end: '18:00', fixed: [{ id: uid(), title: 'Class', start: '16:00', end: '16:30' }], protected: [], tasks: [
   { id: uid(), title: 'Assignment', duration: 45, required: true }, { id: uid(), title: 'Project draft', duration: 90, required: false }, { id: uid(), title: 'Reading', duration: 60, required: false },
 ], completed: [], sample: true });
 let input = fresh(), confirmed = null, draft = null, selected = 0, editingAfterConfirm = false;
@@ -18,9 +19,15 @@ function load() {
     const data = JSON.parse(raw);
     if (data?.version !== 1 || !data.confirmed?.plan?.blocks || !Array.isArray(data.confirmed?.input?.tasks)) throw new Error('Invalid saved plan');
     confirmed = data.confirmed;
+    if (!confirmed.input.day) confirmed.input.day = localDay(new Date(confirmed.at));
     input = copy(confirmed.input);
     showConfirmed();
-  } catch { try { localStorage.removeItem(key); } catch {} window.setTimeout(() => { const box = $('#results-notice'); box.textContent = 'The saved plan could not be read. Start a new day to make a new one.'; }, 0); }
+  } catch {
+    try { localStorage.removeItem(key); } catch {}
+    const warning = document.createElement('p'); warning.className = 'notice'; warning.setAttribute('role', 'alert');
+    warning.textContent = 'The saved plan could not be read. Start a new day to make a new one.';
+    $('#intro .lead').after(warning);
+  }
 }
 function save(value) {
   try {
@@ -32,7 +39,7 @@ function save(value) {
 }
 function show(view) {
   for (const id of ['intro', 'editor', 'results', 'confirmed']) $(`#${id}`).hidden = id !== view;
-  window.scrollTo({ top: 0, behavior: 'instant' });
+  window.scrollTo({ top: 0, behavior: 'auto' });
 }
 function showNotice(text) {
   const box = $('#results-notice'); box.textContent = text; box.hidden = false;
@@ -40,6 +47,7 @@ function showNotice(text) {
 function field(label, type, value, onChange, options = {}) {
   const wrap = document.createElement('label'); wrap.textContent = label;
   const el = document.createElement('input'); el.type = type; el.value = value ?? '';
+  if (type === 'text') el.maxLength = 60;
   if (type === 'number') { el.min = options.min ?? '15'; el.max = options.max ?? '240'; el.step = '15'; }
   if (type === 'time') el.step = '900';
   el.addEventListener('input', () => onChange(type === 'number' ? el.value : el.value));
@@ -78,7 +86,11 @@ function renderRows() {
   });
   $('[data-add="tasks"]').disabled = input.tasks.length >= 5;
 }
-function moveTask(i, direction) { const j = i + direction; if (j < 0 || j >= input.tasks.length) return; [input.tasks[i], input.tasks[j]] = [input.tasks[j], input.tasks[i]]; renderRows(); }
+function moveTask(i, direction) {
+  const j = i + direction; if (j < 0 || j >= input.tasks.length) return;
+  [input.tasks[i], input.tasks[j]] = [input.tasks[j], input.tasks[i]];
+  renderRows(); $('#task-list').children[j]?.querySelector(direction < 0 ? '.order-controls button:first-child' : '.order-controls button:last-child')?.focus();
+}
 function edit() {
   draft = null; $('#form-error').hidden = true; $('#sample-banner').hidden = !input.sample;
   $('#saved-banner').hidden = !confirmed;
@@ -87,6 +99,26 @@ function edit() {
 }
 function planLabel(plan) {
   return `Keep ${plan.kept.length ? plan.kept.map(t => t.title).join(', ') : 'the essentials'} · Defer ${plan.deferred.length ? plan.deferred.map(t => t.title).join(', ') : 'nothing'} · ${plan.open} minutes open.`;
+}
+function renderPrior(plan) {
+  let banner = $('#prior-plan-banner');
+  if (!banner) { banner = document.createElement('div'); banner.id = 'prior-plan-banner'; banner.className = 'notice'; $('#results-lead').after(banner); }
+  banner.replaceChildren(); banner.hidden = !confirmed;
+  let difference = $('#detail-change');
+  if (!difference) { difference = document.createElement('p'); difference.id = 'detail-change'; difference.className = 'notice'; $('#detail-summary').after(difference); }
+  difference.hidden = !confirmed;
+  if (!confirmed) return;
+  banner.append(document.createTextNode(`New draft. “${confirmed.plan.title}” remains your confirmed plan until you choose again. `));
+  const back = action('View confirmed plan', 'View confirmed plan', showConfirmed, 'inline-button'); banner.append(back);
+  const old = new Map(confirmed.plan.blocks.filter(b => b.kind === 'task').map(b => [b.id, b]));
+  const next = new Map(plan.blocks.filter(b => b.kind === 'task').map(b => [b.id, b]));
+  const done = new Set(input.completed || []);
+  const finished = [...old.values()].filter(b => done.has(b.id)).map(b => b.title);
+  const postponed = [...old.values()].filter(b => !done.has(b.id) && !next.has(b.id)).map(b => b.title);
+  const added = [...next.values()].filter(b => !old.has(b.id)).map(b => b.title);
+  const moved = [...next.values()].filter(b => old.has(b.id) && old.get(b.id).start !== b.start).map(b => b.title);
+  const changes = [finished.length && `Marked finished: ${finished.join(', ')}`, postponed.length && `Now postponed: ${postponed.join(', ')}`, added.length && `Now scheduled: ${added.join(', ')}`, moved.length && `Moved: ${moved.join(', ')}`].filter(Boolean);
+  difference.textContent = changes.length ? `Compared with your confirmed plan · ${changes.join(' · ')}.` : 'Compared with your confirmed plan · The same tasks remain scheduled.';
 }
 function timeline(host, blocks) {
   host.replaceChildren();
@@ -116,11 +148,14 @@ function showResults() {
     b.append(top, title, facts, bottom); b.addEventListener('click', () => { selected = i; showResults(); host.children[i].focus({ preventScroll: true }); }); host.append(b);
   });
   const p = draft.plans[selected] || draft.plans[0]; $('#detail-title').textContent = p.title; $('#detail-summary').textContent = planLabel(p); timeline($('#timeline'), p.blocks);
+  renderPrior(p);
   if ($('#results').hidden) show('results');
 }
 function showConfirmed() {
   if (!confirmed) return show('intro');
-  $('#confirmed .notice').textContent = confirmed.input.sample ? 'Fictional sample saved in this browser. Try your own day to make a personal plan.' : 'Saved in this browser only. Your tasks are scheduled, not automatically marked complete.';
+  const stale = !confirmed.input.sample && confirmed.input.day !== localDay();
+  $('#confirmed .notice').textContent = confirmed.input.sample ? 'Fictional sample saved in this browser. Try your own day to make a personal plan.' : stale ? `This plan is from ${confirmed.input.day}. Start a new day to make a current plan.` : 'Saved in this browser only. Your tasks are scheduled, not automatically marked complete.';
+  $('#replan').disabled = stale;
   $('#confirmed-title').textContent = confirmed.plan.title;
   $('#confirmed-summary').textContent = planLabel(confirmed.plan);
   timeline($('#confirmed-timeline'), confirmed.plan.blocks);
@@ -130,18 +165,30 @@ function showConfirmed() {
 $('#start-own').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; edit(); });
 $('#start-demo').addEventListener('click', () => { input = sample(); editingAfterConfirm = false; edit(); });
 $('#clear-sample').addEventListener('click', () => { input = fresh(); edit(); });
+$('#start-time').addEventListener('input', () => { input.start = $('#start-time').value; });
+$('#end-time').addEventListener('input', () => { input.end = $('#end-time').value; });
 $('#back-home').addEventListener('click', () => confirmed ? showConfirmed() : show('intro'));
 $('#show-saved').addEventListener('click', showConfirmed);
 $('#edit-plan').addEventListener('click', edit);
 for (const b of document.querySelectorAll('[data-add]')) b.addEventListener('click', () => {
   const kind = b.dataset.add;
   if (kind === 'tasks') input.tasks.push({ id: uid(), title: '', duration: 45, required: false });
-  else input[kind].push({ id: uid(), title: '', start: input.start, end: input.end });
+  else {
+    let begin, limit;
+    try { begin = minutes(input.start); } catch { begin = minutes(nextQuarter()); }
+    try { limit = minutes(input.end); } catch { limit = begin + 30; }
+    input[kind].push({ id: uid(), title: '', start: clock(begin), end: clock(Math.max(begin + 15, Math.min(begin + 30, limit))) });
+  }
   renderRows();
 });
 $('#plan-form').addEventListener('submit', (event) => {
   event.preventDefault(); input.start = $('#start-time').value; input.end = $('#end-time').value;
-  try { draft = buildPlans(input); selected = 0; $('#form-error').hidden = true; showResults(); }
+  try {
+    if (!input.sample && input.day !== localDay()) throw new Error('This draft belongs to an earlier day. Start a new day to plan again.');
+    if (!input.sample && minutes(nextQuarter()) >= 1425) throw new Error('There is no 15-minute planning window left today. Start a new day tomorrow.');
+    if (!input.sample && input.day === localDay() && minutes(input.start) < minutes(nextQuarter())) throw new Error(`Your start time has passed. Update it to ${nextQuarter()} or later.`);
+    draft = buildPlans(input); selected = 0; $('#form-error').hidden = true; showResults();
+  }
   catch (error) { const box = $('#form-error'); box.textContent = error.message; box.hidden = false; box.scrollIntoView({ block: 'center' }); }
 });
 $('#choose-plan').addEventListener('click', () => { const p = draft?.plans[selected]; if (!p) return; $('#dialog-summary').textContent = planLabel(p); $('#confirm-dialog').showModal(); });

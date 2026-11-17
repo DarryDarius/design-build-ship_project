@@ -30,6 +30,16 @@ test('completed tasks are excluded from replanning',()=>{
   const x=base(); x.completed=['project'];
   assert.equal(buildPlans(x).plans[0].kept.map(t=>t.id).join(), 'reading');
 });
+test('must-do work is placed before optional work when both fit',()=>{
+  const x=base();
+  const plan=buildPlans(x).plans[1];
+  assert.equal(plan.blocks.filter(b=>b.kind==='task')[0].id,'must');
+});
+test('replan timeline omits fixed commitments already in the past',()=>{
+  const x=base(); x.start='17:00'; x.tasks[0].duration=45;
+  const plan=buildPlans(x).plans[0];
+  assert.ok(!plan.blocks.some(b=>b.id==='class'));
+});
 test('insufficient continuous block is explained',()=>{
   const x=base(); x.tasks[0].duration=120;
   assert.throws(()=>buildPlans(x),/uninterrupted block/);
@@ -37,4 +47,8 @@ test('insufficient continuous block is explained',()=>{
 test('time must use 15-minute steps',()=>{
   const x=base();x.start='14:47';
   assert.throws(()=>buildPlans(x),PlanError);
+});
+test('long titles are rejected rather than silently cut off',()=>{
+  const x=base(); x.tasks[0].title='A'.repeat(61);
+  assert.throws(()=>buildPlans(x),/up to 60 characters/);
 });

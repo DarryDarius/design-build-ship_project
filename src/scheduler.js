@@ -43,8 +43,8 @@ export function buildPlans(input) {
   if ((input.fixed || []).length > 3 || (input.protected || []).length > 2) throw new PlanError('Too many fixed or protected blocks.');
   const baseline = blocks.map(x => {
     const a = checkedTime(x.start, `${x.title || 'Block'} start`), b = checkedTime(x.end, `${x.title || 'Block'} end`);
-    if (!x.title?.trim() || b <= a) throw new PlanError('Each fixed or protected block needs a name and a later end time.');
-    return { id: x.id, title: x.title.trim().slice(0, 60), start: a, end: b, kind: x.kind };
+    if (!x.title?.trim() || x.title.trim().length > 60 || b <= a) throw new PlanError('Each fixed or protected block needs a name of up to 60 characters and a later end time.');
+    return { id: x.id, title: x.title.trim(), start: a, end: b, kind: x.kind };
   }).sort((a, b) => a.start - b.start);
   for (let i = 1; i < baseline.length; i++) if (baseline[i].start < baseline[i - 1].end) {
     throw new PlanError(`“${baseline[i - 1].title}” overlaps “${baseline[i].title}”. Change one of those times.`);
@@ -53,9 +53,9 @@ export function buildPlans(input) {
   if (all.length < 2 || all.length > 5) throw new PlanError('Add 2–5 tasks to compare what stays and what waits.');
   const tasks = all.map(x => {
     const duration = Number(x.duration);
-    if (!x.title?.trim()) throw new PlanError('Give each task a name.');
+    if (!x.title?.trim() || x.title.trim().length > 60) throw new PlanError('Give each task a name of up to 60 characters.');
     if (!Number.isInteger(duration) || duration < 15 || duration > 240 || duration % 15) throw new PlanError(`“${x.title}” needs 15–240 minutes in 15-minute steps.`);
-    return { id: x.id, title: x.title.trim().slice(0, 60), duration, required: Boolean(x.required) };
+    return { id: x.id, title: x.title.trim(), duration, required: Boolean(x.required) };
   });
   if (new Set(tasks.map(x => x.id)).size !== tasks.length) throw new PlanError('Task IDs must be unique.');
   const completed = new Set(input.completed || []);
@@ -72,7 +72,7 @@ export function buildPlans(input) {
   const feasible = [];
   for (let mask = 0; mask < (1 << optional.length); mask++) {
     const chosen = optional.filter((_, i) => mask & (1 << i));
-    const placed = fit([...required, ...chosen].sort((a, b) => b.duration - a.duration), slots);
+    const placed = fit([...required].sort((a, b) => b.duration - a.duration).concat([...chosen].sort((a, b) => b.duration - a.duration)), slots);
     if (placed) feasible.push({ mask, placed });
   }
   const rank = (a, b) => {
@@ -95,7 +95,7 @@ export function buildPlans(input) {
   const plans = unique.map((p, index) => {
     const kept = optional.filter((_, i) => p.mask & (1 << i));
     const deferred = optional.filter((_, i) => !(p.mask & (1 << i)));
-    const blocks = [...baseline, ...p.placed].sort((a, b) => a.start - b.start || a.end - b.end);
+    const blocks = [...baseline.filter(b => b.end > start).map(b => ({ ...b, start: Math.max(b.start, start) })), ...p.placed].sort((a, b) => a.start - b.start || a.end - b.end);
     const open = available - p.placed.reduce((n, b) => n + b.end - b.start, 0);
     const title = p.mask === 0 && optional.length ? 'Leave room to breathe' :
       kept.length === optional.length ? 'Fit everything in' :
