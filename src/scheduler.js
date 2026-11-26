@@ -17,22 +17,34 @@ function subtract(slots, start, end) {
 function fit(tasks, slots, placed = []) {
   if (!tasks.length) return placed;
   const [task, ...rest] = tasks;
-  for (const [a, b] of slots) {
-    for (let start = a; start + task.duration <= b; start += 15) {
-      const answer = fit(rest, subtract(slots, start, start + task.duration), [
-        ...placed, { id: task.id, title: task.title, start, end: start + task.duration, kind: 'task', required: task.required },
-      ]);
-      if (answer) return answer;
-    }
+  for (const [start, limit] of slots) {
+    const end = start + task.duration;
+    if (end > limit) continue;
+    // Without task-specific deadlines, each interval can be packed from its left edge.
+    const answer = fit(rest, subtract(slots, start, end), [
+      ...placed, { id: task.id, title: task.title, start, end, kind: 'task', required: task.required },
+    ]);
+    if (answer) return answer;
   }
   return null;
 }
 
 function checkedTime(value, field) {
-  let n;
-  try { n = minutes(value); } catch { throw new PlanError(`Enter a valid ${field}.`); }
-  if (n % 15) throw new PlanError(`${field} must use a 15-minute step.`);
-  return n;
+  try { return minutes(value); } catch { throw new PlanError(`Enter a valid ${field}.`); }
+}
+
+export function timelineDetails(blocks, start, end) {
+  const occupied = blocks.filter(b => b.end > start && b.start < end && b.end > b.start)
+    .map(b => ({ ...b, start: Math.max(start, b.start), end: Math.min(end, b.end) }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  let openIntervals = [[start, end]];
+  for (const block of occupied) openIntervals = subtract(openIntervals, block.start, block.end);
+  return {
+    blocks: occupied,
+    openIntervals,
+    open: length(openIntervals),
+    longest: Math.max(0, ...openIntervals.map(([a, b]) => b - a)),
+  };
 }
 
 export function buildPlans(input) {
@@ -50,11 +62,11 @@ export function buildPlans(input) {
     throw new PlanError(`“${baseline[i - 1].title}” overlaps “${baseline[i].title}”. Change one of those times.`);
   }
   const all = input.tasks || [];
-  if (all.length < 2 || all.length > 5) throw new PlanError('Add 2–5 tasks to compare what stays and what waits.');
+  if (all.length < 1 || all.length > 5) throw new PlanError('Add 1–5 tasks to make a plan.');
   const tasks = all.map(x => {
     const duration = Number(x.duration);
     if (!x.title?.trim() || x.title.trim().length > 60) throw new PlanError('Give each task a name of up to 60 characters.');
-    if (!Number.isInteger(duration) || duration < 15 || duration > 240 || duration % 15) throw new PlanError(`“${x.title}” needs 15–240 minutes in 15-minute steps.`);
+    if (!Number.isInteger(duration) || duration < 15 || duration > 240) throw new PlanError(`“${x.title}” needs a whole number from 15 to 240 minutes.`);
     return { id: x.id, title: x.title.trim(), duration, required: Boolean(x.required) };
   });
   if (new Set(tasks.map(x => x.id)).size !== tasks.length) throw new PlanError('Task IDs must be unique.');
@@ -65,9 +77,12 @@ export function buildPlans(input) {
   for (const b of baseline) slots = subtract(slots, b.start, b.end);
   const available = length(slots);
   const requiredMinutes = required.reduce((n, x) => n + x.duration, 0);
-  if (requiredMinutes > available) throw new PlanError(`Only ${available} minutes remain, but today's must-do tasks need ${requiredMinutes}. Change a duration, finish time, or must-do choice.`);
+  const longest = Math.max(0, ...slots.map(([a, b]) => b - a));
+  if (requiredMinutes > available) throw new PlanError(`Only ${available} minutes remain. Your must-do tasks need ${requiredMinutes} minutes, so you’re short by ${requiredMinutes - available}. Try a later finish time or adjust a task.`);
+  const tooLong = required.find(t => t.duration > longest);
+  if (tooLong) throw new PlanError(`“${tooLong.title}” needs an uninterrupted block of ${tooLong.duration} minutes. Your longest available block is ${longest} minutes.`);
   const requiredFit = fit([...required].sort((a, b) => b.duration - a.duration), slots);
-  if (!requiredFit) throw new PlanError('Must-do tasks need a longer uninterrupted block than today has. Change a block or task duration.');
+  if (!requiredFit) throw new PlanError('Your must-do tasks fit individually but cannot fit together in the available blocks. Try a later finish time or adjust a task.');
 
   const feasible = [];
   for (let mask = 0; mask < (1 << optional.length); mask++) {
@@ -95,12 +110,12 @@ export function buildPlans(input) {
   const plans = unique.map((p, index) => {
     const kept = optional.filter((_, i) => p.mask & (1 << i));
     const deferred = optional.filter((_, i) => !(p.mask & (1 << i)));
-    const blocks = [...baseline.filter(b => b.end > start).map(b => ({ ...b, start: Math.max(b.start, start) })), ...p.placed].sort((a, b) => a.start - b.start || a.end - b.end);
-    const open = available - p.placed.reduce((n, b) => n + b.end - b.start, 0);
+    const timing = timelineDetails([...baseline, ...p.placed], start, end);
     const title = p.mask === 0 && optional.length ? 'Leave room to breathe' :
+      active.length === 0 ? 'Keep the time open' :
       kept.length === optional.length ? 'Fit everything in' :
       `Keep ${kept[0]?.title || 'the essentials'}`;
-    return { id: `option-${index + 1}`, title, kept, deferred, blocks, open, available, required };
+    return { id: `option-${index + 1}`, title, kept, deferred, ...timing, available, required };
   });
   return { plans, impossible, available, start, end };
 }
