@@ -1,13 +1,18 @@
 # Parallel Days verification
 
+## v2 usability follow-up · November 26, 2026
+
+- Two desktop Chrome participant reports informed the follow-up. Both reported completing independently. A physical-phone trial remains open. [Trial notes](USER_TRIALS.md)
+- On production at 390px and 1440px, fresh Chromium sessions exercised both reported scenarios with synthetic schedules. The fixed 7:00–7:30 PM commitment appeared above the cards in both options. The 4:20 → 5:05 PM scenario showed the previous start, the current start, and the portion outside the revised plan. Its 5- and 10-minute gaps and confirmed 5:05 PM axis were verified.
+- The sample still fit its first two options on the first screen at 390px. The comparison screenshots below show the follow-up release. The other views were carried forward from the initial release. [Follow-up production deployment](https://vercel.com/darius-e0cc/project/B49QXy8qRYop7SnrTuy2qafECYkt)
+
 ## v2 · November 26, 2026
 
 - `npm test` passed 11 scheduler tests. Coverage includes a single 20-minute task, a 10-minute protected block, exact open intervals, window clipping, completed tasks, infeasible must-do work, and zero open time.
 - A fresh Chromium context at both widths completed the live personal and sample flows. The checks covered a past-start repair, a saved personal plan surviving refresh, sample isolation, keyboard option selection, a fixed class retaining its position, and last-change details.
 - The sample's 45-minute delay changed available time from 210 to 165 minutes. The three options showed total and longest open time of 30/30, 60/30, and 120/90 minutes. The reading option listed 15:30–16:00 and 17:30–18:00.
 - Browser checks covered legacy v1 restore, a mismatched saved record, simultaneous confirmations from two tabs, storage failure and retry, and a draft confirmed after midnight. See the [security pass](SECURITY_REVIEW.md).
-- The public URL served all five runtime files byte-for-byte from application commit `a568518`. Course materials, the security report, agent settings, dotenv and Git metadata returned 404. [Production deployment](https://vercel.com/darius-e0cc/project/CvgFdS4WeAdM43c2e8EqNVXXEASM)
-- These screenshots are browser viewport checks. Real-user testing on a physical phone and v2 participant feedback are pending. See the [trial notes](USER_TRIALS.md).
+- The initial v2 deployment matched application commit `a568518` byte-for-byte across all five runtime files. Course materials, the security report, agent settings, dotenv and Git metadata returned 404. [Initial production deployment](https://vercel.com/darius-e0cc/project/CvgFdS4WeAdM43c2e8EqNVXXEASM)
 
 | View | 390px | 1440px |
 | --- | --- | --- |

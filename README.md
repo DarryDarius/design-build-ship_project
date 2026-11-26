@@ -14,6 +14,7 @@ Choose **Plan the rest of today** to enter your times and tasks, or **See a samp
 | People learned time and task rules after submitting. The wide remove control was unclear. | Task limits appear beside the fields. A single task, a 20-minute estimate, and a 10-minute protected block all work. Each row has a labeled Remove action. |
 | Total open minutes didn't say when the time was available. | Each option shows both total and longest uninterrupted open time. A shared timeline shows the exact intervals and keeps fixed commitments anchored. |
 | Relative delay shortcuts made it hard to know what was changing. | Each quick action names the resulting start time. Drafts preserve the saved plan. The next confirmation shows the latest change. |
+| In v2 trials, participants had to inspect the timeline to verify that a fixed commitment survived and when the revised plan actually started. | The comparison shows shared commitments above the cards and labels the previous and current start times. |
 
 ## Run locally
 
