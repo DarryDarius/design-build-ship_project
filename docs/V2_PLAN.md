@@ -1,17 +1,84 @@
-# v2 plan
+# Parallel Days v2 取舍对照执行方案
 
-Status: **provisional**. One participant reported a desktop trial; participant identity and date were not provided. Validate priorities with more target users and a real phone before treating this as a complete research finding. The first three issues have been repaired in the v1 follow-up; the remaining rows are proposed v2 work.
+**产品目标**　让一天被打断的研究生，在很短的时间内看清哪些安排保得住、哪些要推迟，并选一个愿意执行的新计划。评分重心是 **Design**。可上线的主链路是用自己的今天录入 → 比较 → 确认 → 遇到延误 → 看见取舍变化 → 再确认。
 
-| Priority | Evidence from participant 1 | Change | Status and acceptance check |
-| --- | --- | --- | --- |
-| P0 | “如果只改一个地方，我会优先改 Something changed。” Returning to the full form required re-entering the consequence of a disruption. | On the confirmed plan, open quick choices for 30, 45, or 60 minutes lost; a finished-task shortcut; and an edit-details path for other changes. The shortcut goes straight to comparison and retains the old confirmation until a new one is confirmed. | **Implemented after trial.** With a saved sample, **Something changed → 45 min** should show updated cards without entering the form. Refresh before reconfirming should still show the old saved plan. |
-| P0 | The comparison header and explanation occupied much of the first screen. | Reduce comparison-page heading size and top spacing so options and schedule appear sooner. | **Implemented after trial.** Check desktop viewport and phone viewport visually; ask the next participant where they first look. |
-| P1 | The **Fit everything in** card's KEEP area listed Reading but omitted required Interview preparation. | List must-do and optional scheduled tasks together on every card. | **Implemented after trial.** For every option, verify each required task is named on its card and actually appears on its timeline. |
-| P1 | “60 分钟空闲” did not identify an open interval or whether it was fragmented. | Show open intervals in the timeline and state the longest continuous open block alongside total open time. | **Proposed v2.** Compare displayed intervals with actual gaps between scheduled blocks; test zero, one, and several gaps. |
-| P1 | Checking task completion required opening **Something changed**. | Add an actual-completion control on the confirmed plan, then make status persist independently from the chosen schedule. | **Proposed v2.** Mark a task finished, refresh, and verify the status remains; a replan must exclude it without changing the confirmed schedule before confirmation. |
-| P2 | Reading and similar tasks needed one uninterrupted block. | Let the user choose whether a task may be split and specify its shortest useful block. | **Proposed v2.** Confirm that contiguous-only tasks remain contiguous and that split parts each satisfy the minimum; show the parts plainly in the timeline. |
-| P1 | Participant requested a quick “新增一件事” route. | Provide an add-task shortcut on the confirmed plan that opens a focused task entry. | **Partly addressed:** **+ Add a task** creates a task and focuses its name in the existing editor. Test whether that is quick enough; if not, build an inline entry in v2. |
+**交付节点**　2026 年 12 月 1 日 17:30 芝加哥时间。预计实际工作 **9.5 小时**，及早约两至三位试用者，至少一位用真实手机。
 
-## Next trial
+## 1. 从 v1 反馈决定优先级
 
-Give the participant a real disrupted day and ask them to choose and revise without coaching. Record the time and actions from opening **Something changed** to seeing new choices. Check whether “lost 45 minutes” means starting 45 minutes later from now or losing 45 minutes elsewhere in the window. Ask them to identify every must-do task on a card. Test on a phone as well as desktop. Add exact observations to [USER_TRIALS.md](USER_TRIALS.md) before changing priority or declaring the v2 plan final.
+| 反馈或基线 | v2 决定 |
+| --- | --- |
+| 首次访问时，用户需点进去才分清自己的今天和示例 | 首页用 `Plan the rest of today` 和 `See a sample plan`。示例直接打开预填的方案 |
+| 一项任务、20 分钟任务和短保护时间都在提交后被拦住，移除按钮也难辨认 | 支持 1–5 项任务、整数分钟和字段旁提示。任务名旁用紧凑的 `Remove`，操作仍有足够的触控面积 |
+| 桌面试用指出重排要回完整表单。v1 后续提交已让延误直接进入比较，且保留旧确认 | 复用快捷路径，按钮提前显示具体的目标时间。仍可按实际情况进入完整编辑 |
+| 比较页标题占空间，用户看不出“60 分钟空闲”落在哪里。v1 后续已在各卡片补列必做任务 | 首屏优先排方案。每个方案展示总空闲、最长连续空闲，所选时间线展示每段空闲的起止。保留必做明细 |
+| 有人希望快速添加任务、直接标完成、拆分长任务 | 新增任务和标完成沿用现有入口。独立完成状态和任务拆分进入后续验证。时间充裕再把新增任务改成就地录入 |
+
+基线为 v1 后续提交 `ee74788`。桌面试用与课程反馈用于定位卡点，v2 的时间目标和手机端理解度通过新试用判断。 [v1 试用记录](USER_TRIALS.md) · [v1 验证记录](VERIFICATION.md) · [原提案](../proposal/index.html)
+
+## 2. 逐屏交互
+
+1. **首页。** 两个入口各有一句说明，写清自己的今天和虚构示例。已有记录的用户能回到已确认计划，也能从那里找到示例入口。示例使用固定的日期内时间，走同一套求解和确认流程，记录留在本次页面会话。刷新持久化用自己的今天来验证。
+2. **录入。** 默认从当前分钟开始，`Compare plans` 时读取此刻时间。用户指定的开始时间已过去时，在该字段给出 `Use current time`。显示 `Add 1–5 tasks`。常用时长一键选择，自定义时长可填 15–240 的整数分钟，允许 20。固定与保护时段可折叠，接收准确起止时间，允许 10 分钟。必做、可推迟与优先顺序沿用现有含义。移除、调整顺序、字段报错后恢复到合理的焦点位置。
+3. **比较。** 首屏展示开始时间变化、可选方案及当前方案的取舍。每个选项可见 `Keep`、`Move to later` 和两个空闲数字。复用一条所选方案的时间线，所有候选共用时间刻度。重排时在同一刻度标出旧起点和新起点，旧计划的对比摘要列出发生变化的任务。根据同一天的已确认计划与当前草案计算“开始晚了多少”和“可用时间变化多少”，分别表达。一个有意义的方案就展示一个。
+4. **确认。** 当前按钮写 `Choose this plan`，确认框摘要写出所选方案的主要取舍。保存成功后展示 `Confirmed`。有同日重排时，保留最近一次简短变动，包括前后开始时间、可用分钟数及推迟或移回的事项。当天首次确认和新的一天显示各自的计划。存储失败时保持草案，提供重试。
+5. **再变动。** `Something changed` 打开小面板。保留 30、45、60 分钟的常见变化，按已确认起点生成具体目标时间，例如 `Start at 2:45 PM (+45 min)`。个人计划中过去的快捷时间让位于 `Start now` 和 `Set a start time`，当前时间只取一次，避免把已经过去的延误加两遍。点击目标时间直接到草案比较。必做放不下时给出修复入口，同时可回已确认计划。新增任务与标记完成继续支持。
+
+### 界面验收
+
+- **390 × 844。** 参考场景的首屏能看到变化摘要、至少前两个方案的名称与取舍，以及当前方案的空闲数字。完整时间线可下滑查看，确认操作容易找到。
+- **1440px。** 左侧比较，右侧单时间线。保持时间刻度和固定段位置稳定，切换时只更新任务、空闲及文字摘要。
+- 沿用暖白底和深绿。固定、保护、任务、空闲各有文字或图例。用真实比例画时间条，短块的完整标签在下方时间列表读取。色彩和短过渡是提示，文字、焦点与选中状态承载信息。触控目标约 44px，支持键盘与减少动态效果。正文与关键标签保证对比度。
+- 首页、录入、比较、确认均检查空白、错误和下一步。静态页面直接显示，排程或保存确有等待时显示相应状态，避免重复提交。零空闲写 `No open time`。必做总量超出可用时间时显示分钟缺口。某项必做缺少连续时段时给出其所需时长和最长可用区间。多项必做各自放得下、整体放不下时，说明这些任务无法同时排进现有区间。跨日或已到结束时间给出开始新计划的入口。
+
+## 3. 排程和数据规则
+
+- 复用 `src/scheduler.js`、`src/main.js`、`index.html` 和 `styles.css`。任务继续占用一个连续时段。按当前可用区间左缘尝试放置，并回溯选择不同区间。任务无各自的开始限制或截止时间时，同一区间分配到的任务可从左到右排紧，因此精确到分钟也可以避免逐分钟搜索。沿用必做覆盖、可推迟优先顺序和候选去重。
+- 所有显示区间裁到计划窗口，两个相邻区间可以共用端点。固定或保护时段与窗口部分重叠时只画窗口内部分，完全在窗口外时从时间线省略。现有 v1 会将恰好从结束时间开始的固定安排画到窗口外，以此作为回归用例。固定与保护时段的冲突仍按用户录入的原始起止校验。
+- 用排完任务后的空闲区间同时生成列表、总分钟数和最长连续分钟数。零段时两项均为 0。基线可用时间等于窗口扣除固定与保护时段，方案空闲再扣除计划任务，两者在界面使用不同标签。
+- 草案按输入快照生成。编辑使旧候选失效，预览和返回操作不写入个人已确认计划。比较时以生成时刻为准，确认保存屏幕上这版快照。跨日草案需重新开始，逝去的计划时段不推断为已完成。以稳定任务 ID 区分安排、推迟、移除和实际完成。
+- 能读取已有 v1 已确认个人计划，并对旧记录现场计算空闲区间。最近一次变化摘要作为可选字段，与新确认一起成功保存。读旧版时该字段为空。示例记录与个人记录分开，个人写入失败时原计划仍可找回。
+
+## 4. 按顺序开 GitHub issues
+
+| 顺序 | Issue 标题 | 范围与关闭条件 | 估时 |
+| --- | --- | --- | ---: |
+| 1 · P0 | Clarify home and task entry | 明确两个入口、直达示例、任务移除和提前说明规则。第一切片展示所有实际支持的输入范围，预览通过后部署 | 1.25 h |
+| 2 · P0 | Accept minute-level input and single-task plans | 更新前端校验和求解，裁剪时间线并得到真实空闲区间。单任务、20 分钟、10 分钟保护和原约束均通过 | 1.50 h |
+| 3 · P0 | Compare trade-offs on a shared timeline | 比较卡、选中时间线和原计划变化摘要。用第 5 节样例核对 390px 和 1440px，再部署预览 | 2.25 h |
+| 4 · P0 | Replan safely from a confirmed day | 明确延误目标时间、保存最近一次变化、隔离示例、兼容 v1。刷新、取消、失败和跨日检查通过 | 1.25 h |
+| 5 · P0 | Retest with users and ship v2 | 公开链接全新会话、真人复测、视觉截图、独立安全审查、修复、生产部署和演示排练 | 3.25 h |
+
+**执行节奏。** 11 月 26–27 日走完问题 1–2，11 月 28–29 日完成问题 3–4，11 月 30 日复测和修复，12 月 1 日核对生产链接和提交物。每一切片保留可核对的提交和预览。第一切片复核入口与表单，第二次复核时间线和 demo。优先用真人试用发现的问题消化修复工时。就地新增任务作为 P1 候选，主流程通过且复测仍暴露该卡点时再加。
+
+## 5. 验收用例与展会脚本
+
+**确定性示例。** 14:00–18:00。16:00–16:30 上课。作业必做 45 分钟、项目草稿可推迟 90 分钟、阅读可推迟 60 分钟。先选 `Fit everything in`，再把起点推迟至 14:45。可用时间从 210 降至 165 分钟，课程位置保持一致。
+
+| 选择 | 推迟 | 总空闲 | 最长连续 | 确切空闲区间 |
+| --- | --- | ---: | ---: | --- |
+| 保住项目草稿 | 阅读 | 30 分钟 | 30 分钟 | 15:30–16:00 |
+| 保住阅读 | 项目草稿 | 60 分钟 | 30 分钟 | 15:30–16:00、17:30–18:00 |
+| 只做必做作业 | 项目草稿、阅读 | 120 分钟 | 90 分钟 | 15:30–16:00、16:30–18:00 |
+
+**回归检查。**
+
+| 场景 | 预期 |
+| --- | --- |
+| 14:07–15:00，保护 14:23–14:33，一个必做 20 分钟 | 只有一个方案，任务在 14:33–14:53，总空闲 23 分钟，最长 16 分钟 |
+| 固定安排跨过起点或结束时间，另一段从结束时间开始 | 部分重叠正确裁剪，窗口外安排不显示，空闲与所有占用相加等于窗口 |
+| 无空闲、零项录入、最后一项实际完成 | 零空闲明确显示。首次零项给新增提示。已确认计划所有剩余任务完成时展示固定安排、保护时段及余下空闲 |
+| 总量足够但连续段太短，或必做总量超出 | 说明分别指出连续段或分钟缺口。草案不可确认，原计划可返回 |
+| 修改草案输入、切换选项、刷新、存储失败、夜间跨日 | 新候选依据当前快照。刷新回原确认。失败可重试。过期草案提示开始今天的计划 |
+| 旧 v1 计划、重排中的实际完成、个人计划后试示例 | 旧记录能打开。实际完成的任务不再安排。示例确认不会覆盖个人记录 |
+
+**真人试用。** 给两至三位目标用户同一项不带提示的任务：“想起最近一天被拖延的经历，用自己的安排选一版，假设你又晚了 45 分钟，重新决定。” 记录首个入口、首次得到自己的方案所用时间、从打开 `Something changed` 到看到新选项所用时间、误点、求助及一句原话。目标分别是 2 分钟、20 秒，以及独立说出推迟了什么。用补充问题验证能否识别最长连续空闲。把真人记录写入 [USER_TRIALS.md](USER_TRIALS.md)，区分真实手机试用和浏览器尺寸检查。展会后的短回访关注遇到打断后是否主动回来、是否按自己选择的方案开始第一件事。
+
+**展会 60–90 秒。** 从首页打开示例，确认原计划，从 `Something changed` 切到 14:45，展示 210 → 165 分钟。切换三个选项，请观众找能留一整小时的方案，最后确认并展示变动摘要。
+
+## 6. 发布与提交
+
+- 先在本地跑 `npm test` 和 `git diff --check`。每条核心切片后验证部署预览。生产部署用现有 Vercel CLI 流程，按仓库 README 确认 GitHub 与生产版本。公开生产 URL 用无本地数据的浏览器按个人路径复测，保存后刷新并重排。
+- 每个视图留一份 390px 和 1440px 截图，另记录关键空白、错误和保存失败状态。用最新 Chrome 或 Edge 做键盘检查，真人测试覆盖真实手机。
+- 在独立会话做全仓库安全审查。重点核对动态标题的 DOM 渲染、本地存储数据与损坏处理、示例隔离、v1 恢复和失败写入，以及仓库与部署产物的密钥排除。检查适用的 `.env` 读取 deny 规则。现有 `.vercelignore` 加入 `project_v2/`，在部署预览核对课程资料和反馈文件路径返回 404。记录检查、发现、修复和验证。 [v1 安全审查](SECURITY_REVIEW.md)
+- README 或改动说明写明每项 v2 变化及背后的用户问题。提交 Google Classroom 的公开 URL、GitHub 链接和安全报告，带电脑参加 12 月 1 日展会。项目访谈准备一例反馈如何改变交互、一项视觉取舍，以及试用中仍需改进的地方。

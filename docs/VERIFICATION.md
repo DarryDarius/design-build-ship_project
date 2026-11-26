@@ -1,4 +1,22 @@
-# Verification — 2026-11-17
+# Parallel Days verification
+
+## v2 · November 26, 2026
+
+- `npm test` passed 11 scheduler tests. Coverage includes a single 20-minute task, a 10-minute protected block, exact open intervals, window clipping, completed tasks, infeasible must-do work, and zero open time.
+- A fresh Chromium context at both widths completed the live personal and sample flows. The checks covered a past-start repair, a saved personal plan surviving refresh, sample isolation, keyboard option selection, a fixed class retaining its position, and last-change details.
+- The sample's 45-minute delay changed available time from 210 to 165 minutes. The three options showed total and longest open time of 30/30, 60/30, and 120/90 minutes. The reading option listed 15:30–16:00 and 17:30–18:00.
+- Browser checks covered legacy v1 restore, a mismatched saved record, simultaneous confirmations from two tabs, storage failure and retry, and a draft confirmed after midnight. See the [security pass](SECURITY_REVIEW.md).
+- The public URL served all five runtime files byte-for-byte from application commit `a568518`. Course materials, the security report, agent settings, dotenv and Git metadata returned 404. [Production deployment](https://vercel.com/darius-e0cc/project/CvgFdS4WeAdM43c2e8EqNVXXEASM)
+- These screenshots are browser viewport checks. Real-user testing on a physical phone and v2 participant feedback are pending. See the [trial notes](USER_TRIALS.md).
+
+| View | 390px | 1440px |
+| --- | --- | --- |
+| Home | [Phone](screenshots/v2/home-390.png) | [Desktop](screenshots/v2/home-1440.png) |
+| Task entry | [Phone](screenshots/v2/entry-390.png) | [Desktop](screenshots/v2/entry-1440.png) |
+| Compare after a 45-minute delay | [Phone](screenshots/v2/compare-390.png) | [Desktop](screenshots/v2/compare-1440.png) |
+| Confirmed with last change | [Phone](screenshots/v2/confirmed-390.png) | [Desktop](screenshots/v2/confirmed-1440.png) |
+
+## v1 · November 17, 2026
 
 - `npm test`: nine scheduler tests passed, including a 45-minute delay, distinct alternatives, must-do infeasibility and priority, protected-time conflict, completed-task exclusion, past-block removal, continuous-block shortage, 15-minute input validation, and title length validation.
 - `node --check src/main.js` and `node --check src/scheduler.js`: passed.
