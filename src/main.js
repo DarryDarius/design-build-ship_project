@@ -487,6 +487,7 @@ $('#start-time').addEventListener('input', event => {
   $('#start-error').hidden = true;
 });
 $('#end-time').addEventListener('input', event => input.end = event.target.value);
+$('#plan-form').addEventListener('input', () => notice('#form-error', ''));
 for (const add of document.querySelectorAll('[data-add]')) {
   add.addEventListener('click', () => {
     const kind = add.dataset.add;

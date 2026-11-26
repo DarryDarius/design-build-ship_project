@@ -40,7 +40,7 @@ p { line-height: 1.55; }
 .hint { color: var(--muted); font-size: .85rem; }
 .intro, .workspace { max-width: 1280px; margin: auto; padding: 40px clamp(20px, 5vw, 72px) 72px; }
 .intro { display: grid; grid-template-columns: 1.05fr 1fr; align-items: center; gap: clamp(34px, 7vw, 104px); padding-block: 78px 94px; min-height: 73vh; }
-.intro h1 { font-size: clamp(3.65rem, 7vw, 7.5rem); letter-spacing: -.075em; }
+.intro h1 { font-size: clamp(3.65rem, 5.4vw, 5rem); letter-spacing: -.075em; }
 .intro h1 em { color: var(--green); }
 .entry-actions { display: flex; flex-wrap: wrap; gap: 14px; margin: 28px 0 16px; }
 .entry-actions p { font-size: .78rem; color: var(--muted); margin: 7px 0 0; }
@@ -156,6 +156,7 @@ dialog p { margin: 10px 0 15px; overflow-wrap: anywhere; }
   .intro h1 { font-size: clamp(3rem, 13vw, 5.5rem); }
   .entry-actions { display: grid; margin-top: 20px; }
   .entry-actions button { width: 100%; }
+  .presets { grid-column: 1 / -1; }
   .result-layout { margin-top: 10px; gap: 9px; }
   .option-card { padding: 9px 11px; gap: 3px; }
   .choice-footer button { width: 100%; }
