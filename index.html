@@ -1,8 +1,141 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f4f1e9"><meta name="description" content="When the day changes, choose what stays."><title>Parallel Days — choose what stays</title><link rel="stylesheet" href="/styles.css"><script type="module" src="/src/main.js"></script></head>
-<body><header class="site-header"><a class="brand" href="/"><span class="mark">⫶</span> Parallel Days</a><span class="muted">A small tool for changing days</span></header><main>
-<section id="intro" class="intro"><div><p class="eyebrow">WHEN THE DAY CHANGES</p><h1>Choose<br><em>what stays.</em></h1><p class="lead">You have less time than you thought. See a few honest ways forward—and what each one asks you to postpone.</p><div class="actions"><button id="start-own" class="button primary">Use my remaining day ↗</button><button id="start-demo" class="button ghost">Try a sample day</button></div><p class="muted">No account. Your confirmed plan stays in this browser only.</p></div><div class="hero-art" aria-hidden="true"><p>ONE AFTERNOON · THREE POSSIBILITIES</p><div><b>PROJECT</b><i></i>↗</div><div><b>READING</b><i></i>→</div><div><b>OPEN TIME</b><i></i>↘</div><p>The choice is yours.</p></div></section>
-<section id="editor" class="workspace" hidden><div class="section-top"><p class="eyebrow">01 / THE TIME YOU HAVE</p><button id="back-home" class="link-button">← Home</button></div><h1 class="work-title">What still fits<br><em>today?</em></h1><p class="intro-line">Start with what is left, not everything that already happened. Each task needs one uninterrupted block.</p><div id="sample-banner" class="notice" hidden>This is a fictional example. <button id="clear-sample" class="inline-button">Use my own day instead</button>.</div><div id="saved-banner" class="notice" hidden>You're editing a draft. Your confirmed plan stays saved until you choose another one. <button id="show-saved" class="inline-button">View it</button>.</div><form id="plan-form" novalidate><div class="form-section"><h2><small>01</small> Your window</h2><div class="field-grid"><label>From now<input id="start-time" type="time" step="900" required></label><label>Finish by<input id="end-time" type="time" step="900" required></label></div><p class="hint">Times use 15-minute steps. We never schedule work in the past.</p></div><div class="form-section"><h2><small>02</small> Time that cannot move</h2><p class="hint">Classes, meetings, meals, or time you want to protect.</p><div class="two-column"><div><h3>Fixed commitments</h3><div id="fixed-list" class="repeat-list"></div><button type="button" class="add-button" data-add="fixed">+ Add a commitment</button></div><div><h3>Protected time</h3><div id="protected-list" class="repeat-list"></div><button type="button" class="add-button" data-add="protected">+ Protect some time</button></div></div></div><div class="form-section"><h2><small>03</small> What needs time</h2><p class="hint">Put the tasks you most want to keep first. Mark true must-do work; everything else can wait.</p><div id="task-list" class="repeat-list"></div><button type="button" class="add-button" data-add="tasks">+ Add a task</button><p class="hint">Estimated minutes, not a promise of completion. Tasks need a continuous block.</p></div><div id="form-error" class="error-box" role="alert" hidden></div><div class="form-footer"><button type="submit" class="button primary">Compare the possibilities ↗</button><span class="hint">Nothing changes your saved plan yet.</span></div></form></section>
-<section id="results" class="workspace" hidden><div class="section-top"><p class="eyebrow">02 / CHOOSE YOUR WAY FORWARD</p><button id="edit-plan" class="link-button">← Edit my day</button></div><h1 class="work-title">A few ways<br><em>from here.</em></h1><p id="results-lead" class="intro-line"></p><div id="results-notice" class="notice" hidden></div><div class="result-layout"><div><div id="option-list" class="option-list"></div><p class="hint">Every option keeps fixed commitments and protected time. Scheduled does not mean done.</p></div><div class="detail-panel"><p class="eyebrow">THE DAY IN DETAIL</p><h2 id="detail-title"></h2><p id="detail-summary"></p><ol id="timeline" class="timeline"></ol><div class="choice-footer"><button id="choose-plan" class="button primary">Choose this day ↗</button><p class="hint">Preview only until you confirm.</p></div></div></div></section>
-<section id="confirmed" class="workspace" hidden><p class="eyebrow">YOUR CHOSEN DAY</p><h1 class="work-title">A way<br><em>forward.</em></h1><div class="notice">Saved in this browser only. Your tasks are scheduled, not automatically marked complete.</div><div class="confirmed-grid"><div><h2 id="confirmed-title"></h2><p id="confirmed-summary" class="intro-line"></p><div class="stack-actions"><button id="replan" class="button primary">Something changed ↗</button><button id="view-alternatives" class="button ghost">Review alternatives</button><button id="new-day" class="link-button">Start a new day</button></div></div><ol id="confirmed-timeline" class="timeline"></ol></div></section>
-</main><footer class="site-footer"><span>Parallel Days · Design, Build, Ship</span><span>Made for the moment plans change.</span></footer><dialog id="confirm-dialog"><form method="dialog"><p class="eyebrow">ONE LAST LOOK</p><h2>Choose this version?</h2><p id="dialog-summary"></p><p class="hint">It will replace your previous confirmed plan on this device. Tasks are not marked complete.</p><div class="actions"><button value="cancel" class="button ghost">Keep comparing</button><button value="confirm" class="button primary">Confirm this day</button></div></form></dialog></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f4ed">
+  <meta name="description" content="When the day changes, see what still fits.">
+  <title>Parallel Days · Plan the rest of today</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/src/main.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a id="home-link" class="brand" href="/"><span class="mark" aria-hidden="true">↗</span>Parallel Days</a>
+  </header>
+  <main>
+    <section id="intro" class="intro" aria-labelledby="intro-title">
+      <div class="intro-copy">
+        <h1 id="intro-title" tabindex="-1">Plans changed.<br><em>What still fits?</em></h1>
+        <p class="lead">Find a way through the time you have left. See what you can keep, what can wait, and where you have room to breathe.</p>
+        <div class="entry-actions">
+          <div><button id="start-own" class="button primary">Plan the rest of today <span aria-hidden="true">↗</span></button><p>Use your own tasks and commitments.</p></div>
+          <div><button id="start-demo" class="button secondary">See a sample plan</button><p>Compare options for a fictional afternoon.</p></div>
+        </div>
+        <button id="resume-plan" class="text-button" hidden>View my confirmed plan</button>
+        <p class="hint">Your plans stay in this browser.</p>
+        <p id="load-error" class="error-box" role="alert" hidden></p>
+      </div>
+      <div class="hero-example" aria-hidden="true">
+        <p class="eyebrow">A sample afternoon</p>
+        <h2>45 minutes later</h2>
+        <div class="hero-axis"><span>2 PM</span><span>4 PM</span><span>6 PM</span></div>
+        <p>Keep the project draft</p>
+        <div class="hero-track"><i class="elapsed" style="flex:45"></i><i class="task" style="flex:45"></i><i class="open" style="flex:30"></i><i class="fixed" style="flex:30"></i><i class="task" style="flex:90"></i></div>
+        <p>Keep the reading</p>
+        <div class="hero-track"><i class="elapsed" style="flex:45"></i><i class="task" style="flex:45"></i><i class="open" style="flex:30"></i><i class="fixed" style="flex:30"></i><i class="task" style="flex:60"></i><i class="open" style="flex:30"></i></div>
+        <p>Leave room to breathe</p>
+        <div class="hero-track"><i class="elapsed" style="flex:45"></i><i class="task" style="flex:45"></i><i class="open" style="flex:30"></i><i class="fixed" style="flex:30"></i><i class="open" style="flex:90"></i></div>
+        <div class="legend"><span class="task">Tasks</span><span class="fixed">Class</span><span class="open">Open time</span></div>
+      </div>
+    </section>
+
+    <section id="editor" class="workspace editor" aria-labelledby="editor-title" hidden>
+      <h1 id="editor-title" tabindex="-1">Plan the rest of today</h1>
+      <p class="lead">Start with the hours you have left and the tasks that matter.</p>
+      <p id="sample-banner" class="notice" hidden>Sample day · Fictional tasks. <button id="clear-sample" class="text-button">Plan my own day</button></p>
+      <p id="saved-banner" class="notice" hidden>Your confirmed plan stays saved while you edit. <button id="show-saved" class="text-button">View confirmed plan</button></p>
+      <form id="plan-form" novalidate>
+        <div class="form-section">
+          <h2>Time window</h2>
+          <label id="start-mode" class="check-label"><input id="start-now" type="checkbox" checked> Start now</label>
+          <div class="field-grid">
+            <label>Start time<input id="start-time" type="time" required aria-describedby="start-error"></label>
+            <label>Finish by<input id="end-time" type="time" required></label>
+          </div>
+          <div id="start-error" class="field-error" hidden><span id="start-error-text"></span> <button id="use-current" class="text-button" type="button">Use current time</button></div>
+        </div>
+        <div class="form-section">
+          <h2>Tasks</h2>
+          <p id="task-hint" class="hint">Add 1–5 tasks. Use 15–240 whole minutes per task. Put the tasks you want to keep first.</p>
+          <div id="task-list" class="repeat-list"></div>
+          <button type="button" class="button secondary" data-add="tasks">+ Add a task</button>
+        </div>
+        <details id="time-blocks" class="form-section">
+          <summary>Fixed commitments and protected time</summary>
+          <p class="hint">Classes, meetings, breaks, and other time you want to keep.</p>
+          <div class="block-fields">
+            <div><h3>Fixed commitments</h3><div id="fixed-list" class="repeat-list"></div><button type="button" class="button secondary" data-add="fixed">+ Add a commitment</button></div>
+            <div><h3>Protected time</h3><div id="protected-list" class="repeat-list"></div><button type="button" class="button secondary" data-add="protected">+ Protect some time</button></div>
+          </div>
+        </details>
+        <p id="form-error" class="error-box" tabindex="-1" role="alert" hidden></p>
+        <div class="form-footer"><button type="submit" class="button primary">Compare plans <span aria-hidden="true">↗</span></button></div>
+      </form>
+    </section>
+
+    <section id="results" class="workspace results" aria-labelledby="results-title" hidden>
+      <div class="section-top">
+        <div><p id="results-mode" class="eyebrow"></p><h1 id="results-title" tabindex="-1">Compare plans</h1></div>
+        <button id="edit-plan" class="text-button">Edit details</button>
+      </div>
+      <p id="results-lead" class="results-lead"></p>
+      <p id="results-warning" class="notice" hidden></p>
+      <p id="results-error" class="error-box" role="alert" tabindex="-1" hidden></p>
+      <div class="result-layout">
+        <div>
+          <div id="option-list" class="option-list" role="group" aria-label="Plan options"></div>
+          <div class="choice-footer"><button id="choose-plan" class="button primary">Choose this plan <span aria-hidden="true">↗</span></button></div>
+          <button id="back-confirmed" class="text-button" hidden>Back to confirmed plan</button>
+        </div>
+        <div class="detail-panel">
+          <div class="timeline-header"><h2>Timeline</h2><p id="detail-summary" aria-live="polite" aria-atomic="true"></p></div>
+          <div id="result-axis"></div>
+          <p id="detail-change" class="change-detail" hidden></p>
+          <ol id="timeline" class="timeline"></ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="confirmed" class="workspace" aria-labelledby="confirmed-title" hidden>
+      <p id="confirmed-mode" class="eyebrow"></p>
+      <h1 id="confirmed-title" tabindex="-1"></h1>
+      <p id="confirmed-notice" class="lead"></p>
+      <div class="confirmed-grid">
+        <div>
+          <div class="stack-actions">
+            <button id="replan" class="button primary" aria-expanded="false" aria-controls="quick-panel">Something changed <span aria-hidden="true">↗</span></button>
+            <button id="view-alternatives" class="button secondary">Review alternatives</button>
+          </div>
+          <section id="quick-panel" class="quick-panel" hidden aria-labelledby="quick-title">
+            <h2 id="quick-title">When can you start?</h2>
+            <div id="quick-delays" class="quick-actions"></div>
+            <p id="quick-error" class="error-box" role="alert" hidden></p>
+            <div class="quick-actions">
+              <button id="set-start" class="text-button">Set a start time</button>
+              <button id="quick-add" class="text-button">+ Add a task</button>
+              <button id="quick-edit" class="text-button">Edit details</button>
+            </div>
+            <div id="quick-finished"></div>
+          </section>
+          <div id="last-change" class="last-change" hidden><h2>Last change</h2><p id="last-change-time"></p><p id="last-change-tasks"></p></div>
+          <div class="confirm-links"><button id="new-day" class="text-button">Plan the rest of today</button><button id="confirmed-sample" class="text-button">See a sample plan</button></div>
+        </div>
+        <div class="detail-panel">
+          <div class="timeline-header"><h2>Timeline</h2><p id="confirmed-summary"></p></div>
+          <div id="confirmed-axis"></div>
+          <ol id="confirmed-timeline" class="timeline"></ol>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer">Parallel Days · Design, Build, Ship</footer>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title">Confirm this plan?</h2>
+      <p id="dialog-summary"></p>
+      <div class="dialog-actions"><button value="cancel" class="button secondary" autofocus>Keep comparing</button><button value="confirm" class="button primary">Confirm plan</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

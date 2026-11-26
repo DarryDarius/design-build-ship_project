@@ -5,3 +5,6 @@ tests/
 Design, Build, Ship - Week 5 - Project Proposal.md
 V1_EXECUTION_PLAN.md
 README.md
+project_v2/
+.env
+.env.*

@@ -1,280 +1,605 @@
-import { buildPlans, clock, minutes } from './scheduler.js';
+import { buildPlans, clock, minutes, timelineDetails } from './scheduler.js';
+import { changeSummary, openLabel, renderTimeline, timeLabel } from './timeline.js';
 
-const $ = (s) => document.querySelector(s);
-const key = 'parallel-days-v1';
-const copy = (x) => structuredClone(x);
-const uid = () => crypto.randomUUID();
+const $ = selector => document.querySelector(selector);
+const storageKey = 'parallel-days-v1';
 const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const nextQuarter = () => { const d = new Date(); return clock(Math.min(1425, Math.ceil((d.getHours() * 60 + d.getMinutes()) / 15) * 15)); };
-const fresh = () => { const start = nextQuarter(); return { day: localDay(), start, end: clock(Math.min(1425, minutes(start) + 180)), fixed: [], protected: [], tasks: [{ id: uid(), title: '', duration: 45, required: true }], completed: [], sample: false }; };
-const sample = () => ({ day: localDay(), start: '14:45', end: '18:00', fixed: [{ id: uid(), title: 'Class', start: '16:00', end: '16:30' }], protected: [], tasks: [
-  { id: uid(), title: 'Assignment', duration: 45, required: true }, { id: uid(), title: 'Project draft', duration: 90, required: false }, { id: uid(), title: 'Reading', duration: 60, required: false },
-], completed: [], sample: true });
-let input = fresh(), confirmed = null, draft = null, selected = 0, editingAfterConfirm = false, compareToConfirmed = false;
+const minuteNow = (d = new Date()) => d.getHours() * 60 + d.getMinutes();
+const task = (title = '', duration = 45, required = false) => ({ id: crypto.randomUUID(), title, duration, required });
+
+function fresh() {
+  const now = new Date();
+  const start = minuteNow(now);
+  return {
+    day: localDay(now), start: clock(start), end: clock(Math.min(1439, start + 180)),
+    fixed: [], protected: [], tasks: [task('', 45, true)], completed: [], sample: false,
+  };
+}
+
+function sample() {
+  return {
+    day: localDay(), start: '14:00', end: '18:00', sample: true,
+    fixed: [{ id: crypto.randomUUID(), title: 'Class', start: '16:00', end: '16:30' }],
+    protected: [], completed: [],
+    tasks: [task('Assignment', 45, true), task('Project draft', 90), task('Reading', 60)],
+  };
+}
+
+let input = fresh();
+let confirmed = { personal: null, sample: null };
+let stored = null;
+let draft = null;
+let selected = 0;
+let startNow = true;
+let editingPrior = false;
+let saving = false;
+const mode = () => input.sample ? 'sample' : 'personal';
+const savedPlan = () => confirmed[mode()];
+
+function show(view) {
+  for (const id of ['intro', 'editor', 'results', 'confirmed']) {
+    $(`#${id}`).hidden = id !== view;
+  }
+  window.scrollTo(0, 0);
+  $(`#${view}-title`).focus({ preventScroll: true });
+}
+
+function notice(selector, message) {
+  const box = $(selector);
+  box.textContent = message;
+  box.hidden = !message;
+}
+
+function restorePlan(saved, plan) {
+  if (!Array.isArray(plan.blocks) || !plan.blocks.every(block =>
+    block && Number.isInteger(block.start) && Number.isInteger(block.end) &&
+    block.end > block.start && ['task', 'fixed', 'protected'].includes(block.kind))) {
+    throw new Error('Invalid saved blocks');
+  }
+  const { plans, start, end } = buildPlans(saved);
+  const timing = timelineDetails(plan.blocks, start, end);
+  const tasks = timing.blocks.filter(block => block.kind === 'task');
+  const fixed = timing.blocks.filter(block => block.kind !== 'task');
+  const ids = new Set(tasks.map(block => block.id));
+  const choice = plans.find(candidate => {
+    const expected = [...candidate.required, ...candidate.kept];
+    return expected.length === tasks.length && expected.length === ids.size &&
+      expected.every(task => ids.has(task.id));
+  });
+  const baseline = plans[0].blocks.filter(block => block.kind !== 'task');
+  if (!choice || timing.blocks.some((block, index) => index && block.start < timing.blocks[index - 1].end) ||
+      plan.blocks.filter(block => block.kind === 'task').some(block => block.start < start || block.end > end) ||
+      baseline.length !== fixed.length || baseline.some((block, index) =>
+        ['id', 'title', 'kind', 'start', 'end'].some(key => block[key] !== fixed[index][key]))) {
+    throw new Error('Saved blocks do not match the plan');
+  }
+  const expected = new Map([...choice.required, ...choice.kept].map(task => [task.id, task]));
+  if (tasks.some(block => {
+    const task = expected.get(block.id);
+    return task.title !== block.title || task.required !== block.required || task.duration !== block.end - block.start;
+  })) throw new Error('Saved tasks do not match the plan');
+  return { ...choice, ...timing };
+}
 
 function load() {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    if (data?.version !== 1 || !data.confirmed?.plan?.blocks || !Array.isArray(data.confirmed?.input?.tasks)) throw new Error('Invalid saved plan');
-    confirmed = data.confirmed;
-    if (!confirmed.input.day) confirmed.input.day = localDay(new Date(confirmed.at));
-    input = copy(confirmed.input);
+    stored = localStorage.getItem(storageKey);
+    if (!stored) return;
+    const data = JSON.parse(stored);
+    const value = data?.confirmed;
+    if (![1, 2].includes(data?.version) || !value?.input || !value?.plan) throw new Error();
+    const { input: saved, plan } = value;
+    if (saved.sample === true) return;
+    if (saved.sample !== false && saved.sample !== undefined) throw new Error('Invalid plan type');
+    saved.sample = false;
+    saved.day ||= localDay(new Date(value.at));
+    saved.completed ??= [];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(saved.day) ||
+        !['tasks', 'fixed', 'protected', 'completed'].every(key => Array.isArray(saved[key]))) {
+      throw new Error();
+    }
+    value.plan = restorePlan(saved, plan);
+    if (typeof value.lastChange?.time !== 'string' || typeof value.lastChange?.tasks !== 'string') delete value.lastChange;
+    confirmed.personal = value;
+    input = structuredClone(saved);
     showConfirmed();
   } catch {
-    try { localStorage.removeItem(key); } catch {}
-    const warning = document.createElement('p'); warning.className = 'notice'; warning.setAttribute('role', 'alert');
-    warning.textContent = 'The saved plan could not be read. Start a new day to make a new one.';
-    $('#intro .lead').after(warning);
+    confirmed.personal = null;
+    notice('#load-error', 'Your saved plan could not be opened. You can still make a new plan.');
   }
 }
-function save(value) {
-  try {
-    const raw = JSON.stringify({ version: 1, confirmed: value });
-    localStorage.setItem(key, raw);
-    if (localStorage.getItem(key) !== raw) throw new Error('Save failed');
-    return true;
-  } catch { return false; }
+
+function savePersonal(value) {
+  function write() {
+    if (value.input.day !== localDay()) throw new Error('This draft is from an earlier day. Return home to start today’s plan.');
+    if (localStorage.getItem(storageKey) !== stored) {
+      throw new Error('The saved plan changed in another tab. Reload this page to open the latest plan.');
+    }
+    const next = JSON.stringify({ version: 2, confirmed: value });
+    localStorage.setItem(storageKey, next);
+    stored = next;
+  }
+  return navigator.locks ? navigator.locks.request(storageKey, write) : write();
 }
-function show(view) {
-  for (const id of ['intro', 'editor', 'results', 'confirmed']) $(`#${id}`).hidden = id !== view;
-  window.scrollTo({ top: 0, behavior: 'auto' });
+
+function button(label, accessibleName, click, className = 'text-button') {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.textContent = label;
+  if (accessibleName) el.setAttribute('aria-label', accessibleName);
+  el.className = className;
+  el.addEventListener('click', click);
+  return el;
 }
-function showNotice(text) {
-  const box = $('#results-notice'); box.textContent = text; box.hidden = false;
-}
-function field(label, type, value, onChange, options = {}) {
-  const wrap = document.createElement('label'); wrap.textContent = label;
-  const el = document.createElement('input'); el.type = type; el.value = value ?? '';
+
+function field(label, type, value, onChange) {
+  const wrap = document.createElement('label');
+  wrap.textContent = label;
+  const el = document.createElement('input');
+  el.type = type;
+  el.value = value ?? '';
   if (type === 'text') el.maxLength = 60;
-  if (type === 'number') { el.min = options.min ?? '15'; el.max = options.max ?? '240'; el.step = '15'; }
-  if (type === 'time') el.step = '900';
-  el.addEventListener('input', () => onChange(type === 'number' ? el.value : el.value));
-  wrap.append(el); return wrap;
+  if (type === 'number') {
+    el.min = '15';
+    el.max = '240';
+    el.step = '1';
+    el.inputMode = 'numeric';
+    el.setAttribute('aria-describedby', 'task-hint');
+  }
+  el.addEventListener('input', () => onChange(el.value));
+  wrap.append(el);
+  return wrap;
 }
-function action(label, title, click, className = 'remove') {
-  const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.title = title; b.setAttribute('aria-label', title); b.className = className; b.addEventListener('click', click); return b;
+
+function focusRow(host, index, fallback) {
+  const row = host.children[Math.min(index, host.children.length - 1)];
+  (row?.querySelector('input[type=text]') || fallback).focus();
 }
+
 function renderRows() {
   for (const kind of ['fixed', 'protected']) {
-    const host = $(`#${kind}-list`); host.replaceChildren();
-    input[kind].forEach((item) => {
-      const row = document.createElement('div'); row.className = 'repeat-row';
-      row.append(field('Name', 'text', item.title, v => item.title = v), field('Start', 'time', item.start, v => item.start = v), field('End', 'time', item.end, v => item.end = v), action('×', `Remove ${item.title || kind}`, () => { input[kind] = input[kind].filter(x => x.id !== item.id); renderRows(); }));
+    const host = $(`#${kind}-list`);
+    const add = $(`[data-add=${kind}]`);
+    host.replaceChildren();
+    input[kind].forEach((item, index) => {
+      const row = document.createElement('div');
+      row.className = 'repeat-row block-row';
+      row.append(
+        field('Name', 'text', item.title, v => item.title = v),
+        field('Start', 'time', item.start, v => item.start = v),
+        field('End', 'time', item.end, v => item.end = v),
+        button('Remove', `Remove ${item.title || kind}`, () => {
+          input[kind].splice(index, 1);
+          renderRows();
+          focusRow(host, index, add);
+        }),
+      );
       host.append(row);
     });
-    $(`[data-add="${kind}"]`).disabled = input[kind].length >= (kind === 'fixed' ? 3 : 2);
+    add.disabled = input[kind].length >= (kind === 'fixed' ? 3 : 2);
   }
-  const host = $('#task-list'); host.replaceChildren();
-  input.tasks.forEach((task, index) => {
-    const row = document.createElement('div'); row.className = 'repeat-row task-row';
-    row.append(field('Task', 'text', task.title, v => task.title = v), field('Minutes', 'number', task.duration, v => task.duration = v));
-    const check = document.createElement('label'); check.className = 'check-label';
-    const box = document.createElement('input'); box.type = 'checkbox'; box.checked = task.required; box.addEventListener('change', () => task.required = box.checked);
-    check.append(box, 'Must do today'); row.append(check);
-    const controls = document.createElement('div'); controls.className = 'order-controls';
-    controls.append(action('↑', `Move ${task.title || 'task'} up`, () => moveTask(index, -1)), action('↓', `Move ${task.title || 'task'} down`, () => moveTask(index, 1)));
-    controls.children[0].disabled = index === 0; controls.children[1].disabled = index === input.tasks.length - 1; row.append(controls);
-    row.append(action('×', `Remove ${task.title || 'task'}`, () => { input.tasks.splice(index, 1); input.completed = input.completed.filter(id => id !== task.id); renderRows(); }));
-    if (editingAfterConfirm) {
-      const done = document.createElement('label'); done.className = 'check-label';
-      const d = document.createElement('input'); d.type = 'checkbox'; d.checked = input.completed.includes(task.id); d.addEventListener('change', () => input.completed = d.checked ? [...input.completed, task.id] : input.completed.filter(id => id !== task.id));
-      done.append(d, 'Actually finished'); row.append(done);
+  const host = $('#task-list');
+  const add = $('[data-add=tasks]');
+  host.replaceChildren();
+  input.tasks.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'repeat-row task-row';
+    const name = field('Task', 'text', item.title, v => item.title = v);
+    const duration = field('Minutes', 'number', item.duration, v => item.duration = v);
+    const presets = document.createElement('div');
+    presets.className = 'presets';
+    for (const count of [15, 30, 45, 60, 90]) {
+      presets.append(button(String(count), `Set duration to ${count} minutes`, () => {
+        item.duration = count;
+        duration.lastChild.value = count;
+        duration.lastChild.focus();
+      }, 'preset'));
     }
+    const options = document.createElement('div');
+    options.className = 'task-options';
+    const must = document.createElement('label');
+    must.className = 'check-label';
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = item.required;
+    check.addEventListener('change', () => item.required = check.checked);
+    must.append(check, 'Must do today');
+    options.append(must);
+    const remove = button('Remove', `Remove task ${index + 1}`, () => {
+      input.tasks.splice(index, 1);
+      input.completed = input.completed.filter(id => id !== item.id);
+      renderRows();
+      focusRow(host, index, add);
+    });
+    const order = document.createElement('div');
+    order.className = 'order-controls';
+    for (const [delta, arrow, direction] of [[-1, '↑', 'up'], [1, '↓', 'down']]) {
+      const next = index + delta;
+      const move = button(arrow, `Move task ${index + 1} ${direction}`, () => {
+        [input.tasks[index], input.tasks[next]] = [input.tasks[next], input.tasks[index]];
+        renderRows();
+        focusRow(host, next, add);
+      }, 'preset');
+      move.disabled = next < 0 || next >= input.tasks.length;
+      order.append(move);
+    }
+    order.hidden = input.tasks.length < 2;
+    options.append(order);
+    if (editingPrior) {
+      const finished = document.createElement('label');
+      finished.className = 'check-label';
+      const done = document.createElement('input');
+      done.type = 'checkbox';
+      done.checked = input.completed.includes(item.id);
+      done.addEventListener('change', () => {
+        input.completed = input.completed.filter(id => id !== item.id);
+        if (done.checked) input.completed.push(item.id);
+      });
+      finished.append(done, 'Actually finished');
+      options.append(finished);
+    }
+    row.append(name, remove, duration, presets, options);
     host.append(row);
   });
-  $('[data-add="tasks"]').disabled = input.tasks.length >= 5;
+  add.disabled = input.tasks.length >= 5;
 }
-function moveTask(i, direction) {
-  const j = i + direction; if (j < 0 || j >= input.tasks.length) return;
-  [input.tasks[i], input.tasks[j]] = [input.tasks[j], input.tasks[i]];
-  renderRows(); $('#task-list').children[j]?.querySelector(direction < 0 ? '.order-controls button:first-child' : '.order-controls button:last-child')?.focus();
+
+function setStartMode(value) {
+  startNow = value;
+  $('#start-now').checked = value;
+  $('#start-time').disabled = value;
+  if (value) input.start = clock(minuteNow());
+  $('#start-time').value = input.start;
+  $('#start-time').removeAttribute('aria-invalid');
+  $('#start-error').hidden = true;
 }
+
 function edit() {
-  draft = null; $('#form-error').hidden = true; $('#sample-banner').hidden = !input.sample;
-  $('#saved-banner').hidden = !confirmed;
-  $('#start-time').value = input.start; $('#end-time').value = input.end;
-  renderRows(); show('editor');
+  draft = null;
+  notice('#form-error', '');
+  $('#sample-banner').hidden = !input.sample;
+  $('#saved-banner').hidden = !savedPlan();
+  $('#start-mode').hidden = input.sample;
+  setStartMode(startNow && !input.sample);
+  $('#end-time').value = input.end;
+  $('#time-blocks').open = Boolean(input.fixed.length || input.protected.length);
+  renderRows();
+  show('editor');
 }
-function planLabel(plan) {
-  return `Keep ${plan.kept.length ? plan.kept.map(t => t.title).join(', ') : 'the essentials'} · Defer ${plan.deferred.length ? plan.deferred.map(t => t.title).join(', ') : 'nothing'} · ${plan.open} minutes total open.`;
+
+function startPersonal() {
+  input = fresh();
+  startNow = true;
+  editingPrior = false;
+  edit();
 }
-function renderPrior(plan) {
-  let banner = $('#prior-plan-banner');
-  if (!banner) { banner = document.createElement('div'); banner.id = 'prior-plan-banner'; banner.className = 'notice'; $('#results-lead').after(banner); }
-  banner.replaceChildren(); banner.hidden = !confirmed;
-  let difference = $('#detail-change');
-  if (!difference) { difference = document.createElement('p'); difference.id = 'detail-change'; difference.className = 'notice'; $('#detail-summary').after(difference); }
-  difference.hidden = !confirmed;
-  if (!confirmed) return;
-  banner.append(document.createTextNode(compareToConfirmed ? `New draft. “${confirmed.plan.title}” remains your confirmed plan until you choose again. ` : 'A new day draft. Your previous plan stays saved until you choose this one. '));
-  const back = action('View confirmed plan', 'View confirmed plan', showConfirmed, 'inline-button'); banner.append(back);
-  difference.hidden = !compareToConfirmed;
-  if (!compareToConfirmed) return;
-  const old = new Map(confirmed.plan.blocks.filter(b => b.kind === 'task').map(b => [b.id, b]));
-  const next = new Map(plan.blocks.filter(b => b.kind === 'task').map(b => [b.id, b]));
-  const done = new Set(input.completed || []);
-  const finished = [...old.values()].filter(b => done.has(b.id)).map(b => b.title);
-  const postponed = [...old.values()].filter(b => !done.has(b.id) && !next.has(b.id)).map(b => b.title);
-  const added = [...next.values()].filter(b => !old.has(b.id)).map(b => b.title);
-  const moved = [...next.values()].filter(b => old.has(b.id) && old.get(b.id).start !== b.start).map(b => b.title);
-  const changes = [finished.length && `Marked finished: ${finished.join(', ')}`, postponed.length && `Now postponed: ${postponed.join(', ')}`, added.length && `Now scheduled: ${added.join(', ')}`, moved.length && `Moved: ${moved.join(', ')}`].filter(Boolean);
-  difference.textContent = changes.length ? `Compared with your confirmed plan · ${changes.join(' · ')}.` : 'Compared with your confirmed plan · The same tasks remain scheduled.';
+
+function compare(next) {
+  const snapshot = structuredClone(next);
+  const result = buildPlans(snapshot);
+  draft = {
+    ...result, input: snapshot,
+    previous: editingPrior && savedPlan()?.input.day === snapshot.day ? savedPlan() : null,
+  };
+  selected = 0;
+  notice('#results-error', '');
+  renderResults();
 }
-function timeline(host, blocks) {
-  host.replaceChildren();
-  for (const b of blocks) {
-    const li = document.createElement('li'); li.className = b.kind;
-    const time = document.createElement('time'); time.textContent = `${clock(b.start)}–${clock(b.end)}`;
-    const body = document.createElement('div'); const title = document.createElement('strong'); title.textContent = b.title;
-    const detail = document.createElement('small'); detail.textContent = b.kind === 'task' ? (b.required ? 'Must do · planned time' : 'Can wait · planned time') : b.kind === 'fixed' ? 'Fixed commitment' : 'Protected time';
-    body.append(title, detail); li.append(time, body); host.append(li);
+
+function titles(tasks) {
+  return tasks.map(t => t.title).join(', ');
+}
+
+function renderSelection() {
+  const plan = draft.plans[selected];
+  for (const [index, card] of [...$('#option-list').children].entries()) {
+    card.setAttribute('aria-pressed', String(index === selected));
   }
+  $('#detail-summary').textContent = openLabel(plan);
+  renderTimeline($('#result-axis'), $('#timeline'), draft.input, plan, draft.previous);
+  notice('#detail-change', draft.previous ? changeSummary(draft.previous, draft.input, plan).tasks : '');
 }
-function showResults() {
-  if (!draft) return edit();
-  $('#results-notice').hidden = !draft.impossible.length;
-  if (draft.impossible.length) showNotice(`Cannot fit today: ${draft.impossible.join(', ')}. They remain deferred in every option.`);
-  const common = draft.plans[0].required.map(t => t.title);
-  $('#results-lead').textContent = (draft.plans.length === 1 ? 'Only one meaningfully different arrangement fits these constraints.' : `${draft.available} usable minutes remain. Compare what each choice keeps and lets wait.`) + (common.length ? ` Every option includes your must-do work: ${common.join(', ')}.` : '');
-  const host = $('#option-list'); host.replaceChildren();
-  draft.plans.forEach((p, i) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'option-card'; b.setAttribute('aria-pressed', String(i === selected));
-    const top = document.createElement('span'); top.className = 'option-top'; top.textContent = `POSSIBILITY ${String(i + 1).padStart(2, '0')}`;
-    const title = document.createElement('span'); title.className = 'option-title'; title.textContent = p.title;
-    const facts = document.createElement('span'); facts.className = 'option-facts';
-    for (const [label, value] of [['Keep', [...p.required, ...p.kept].map(t => t.title).join(', ') || 'No remaining tasks'], ['Later', p.deferred.map(t => t.title).join(', ') || 'Nothing else']]) {
-      const item = document.createElement('span'), strong = document.createElement('strong'); strong.textContent = label; item.append(strong, document.createTextNode(value)); facts.append(item);
+
+function renderResults() {
+  $('#results-mode').textContent = draft.input.sample ? 'Sample day · Draft' : 'Today · Draft';
+  $('#results-lead').textContent = draft.previous
+    ? changeSummary(draft.previous, draft.input, draft.plans[0]).time
+    : `${draft.available} min available${draft.plans.length === 1 ? ' · One option fits' : ''}`;
+  notice('#results-warning', draft.impossible.length ? `Cannot fit today: ${draft.impossible.join(', ')}.` : '');
+  $('#back-confirmed').hidden = !savedPlan();
+  const list = $('#option-list');
+  list.replaceChildren();
+  draft.plans.forEach((plan, index) => {
+    const card = button('', null, () => {
+      selected = index;
+      renderSelection();
+    }, 'option-card');
+    const title = document.createElement('strong');
+    title.className = 'option-title';
+    title.textContent = plan.title;
+    const metrics = document.createElement('span');
+    metrics.className = 'option-metrics';
+    metrics.textContent = openLabel(plan);
+    const facts = document.createElement('span');
+    facts.className = 'option-facts';
+    for (const [label, value] of [
+      ['Keep', titles([...plan.required, ...plan.kept]) || 'No remaining tasks'],
+      ['Move to later', titles(plan.deferred) || 'Nothing'],
+    ]) {
+      const line = document.createElement('span');
+      const key = document.createElement('b');
+      key.textContent = label;
+      line.append(key, document.createTextNode(value));
+      facts.append(line);
     }
-    const bottom = document.createElement('span'); bottom.className = 'option-bottom'; bottom.textContent = `${p.open} min total open · ${p.required.length} must-do task${p.required.length === 1 ? '' : 's'}`;
-    b.append(top, title, facts, bottom); b.addEventListener('click', () => { selected = i; showResults(); host.children[i].focus({ preventScroll: true }); }); host.append(b);
+    card.append(title, metrics, facts);
+    list.append(card);
   });
-  const p = draft.plans[selected] || draft.plans[0]; $('#detail-title').textContent = p.title; $('#detail-summary').textContent = planLabel(p); timeline($('#timeline'), p.blocks);
-  renderPrior(p);
-  if ($('#results').hidden) show('results');
+  renderSelection();
+  show('results');
 }
+
+function startSample() {
+  input = sample();
+  confirmed.sample = null;
+  startNow = false;
+  editingPrior = false;
+  compare(input);
+}
+
+function showHome() {
+  $('#resume-plan').hidden = !confirmed.personal;
+  show('intro');
+}
+
+function currentConfirmed() {
+  return savedPlan()?.input.sample || savedPlan()?.input.day === localDay();
+}
+
 function showConfirmed() {
-  if (!confirmed) return show('intro');
-  const stale = !confirmed.input.sample && confirmed.input.day !== localDay();
-  $('#confirmed .notice').textContent = confirmed.input.sample ? 'Fictional sample saved in this browser. Try your own day to make a personal plan.' : stale ? `This plan is from ${confirmed.input.day}. Start a new day to make a current plan.` : 'Saved in this browser only. Your tasks are scheduled, not automatically marked complete.';
-  $('#replan').disabled = stale;
-  $('#confirmed-title').textContent = confirmed.plan.title;
-  $('#confirmed-summary').textContent = planLabel(confirmed.plan);
-  timeline($('#confirmed-timeline'), confirmed.plan.blocks);
+  const value = savedPlan();
+  if (!value) return showHome();
+  const { input: saved, plan, lastChange } = value;
+  const expired = !currentConfirmed();
+  const ended = !saved.sample && !expired && minuteNow() >= minutes(saved.end);
+  $('#confirmed-mode').textContent = saved.sample ? 'Sample day · Confirmed' : 'Confirmed';
+  $('#confirmed-title').textContent = plan.title;
+  $('#confirmed-notice').textContent = saved.sample ? 'Fictional afternoon · Available in this session.'
+    : expired ? `This plan is from ${saved.day}. Start a new plan for today.`
+    : ended ? 'This window has ended. Start a new plan to continue today.'
+    : 'Saved in this browser. Tasks are marked complete only when you say they are.';
+  $('#confirmed-summary').textContent = openLabel(plan);
+  renderTimeline($('#confirmed-axis'), $('#confirmed-timeline'), saved, plan);
+  $('#last-change').hidden = !lastChange;
+  notice('#last-change-time', lastChange?.time || '');
+  notice('#last-change-tasks', lastChange?.tasks || '');
+  $('#replan').disabled = expired || ended;
+  $('#view-alternatives').disabled = expired || ended;
+  $('#confirmed-sample').hidden = saved.sample;
+  $('#replan').setAttribute('aria-expanded', 'false');
   $('#quick-panel').hidden = true;
-  $('#quick-error').hidden = true;
+  notice('#quick-error', '');
   show('confirmed');
 }
 
-function quickReplan(delay = 0, finishedId = null) {
-  const next = copy(confirmed.input);
-  const delayedStart = minutes(next.start) + delay;
-  next.start = clock(next.sample ? delayedStart : Math.max(delayedStart, minutes(nextQuarter())));
-  if (finishedId && !next.completed.includes(finishedId)) next.completed.push(finishedId);
-  try {
-    const nextDraft = buildPlans(next);
-    input = next;
-    draft = nextDraft;
-    selected = 0;
-    compareToConfirmed = true;
-    editingAfterConfirm = true;
-    showResults();
-  } catch (error) {
-    const box = $('#quick-error');
-    box.textContent = `${error.message} Use Edit details to adjust your day.`;
-    box.hidden = false;
+function editConfirmed({ addTask = false, focusStart = false } = {}) {
+  const value = savedPlan();
+  if (!currentConfirmed()) return showConfirmed();
+  const next = structuredClone(value.input);
+  if (addTask && next.tasks.length >= 5) {
+    notice('#quick-error', 'This plan has five tasks. Edit details to remove a task before adding one.');
+    return;
   }
-}
-
-function editChangedDay(addTask = false) {
-  input = copy(confirmed.input);
-  compareToConfirmed = true;
-  editingAfterConfirm = true;
-  const now = nextQuarter();
-  if (!input.sample && minutes(now) > minutes(input.start) && minutes(now) < minutes(input.end)) input.start = now;
-  if (addTask) {
-    if (input.tasks.length >= 5) {
-      const box = $('#quick-error'); box.textContent = 'This plan already has five tasks. Edit or remove a task before adding another.'; box.hidden = false; return;
-    }
-    input.tasks.push({ id: uid(), title: '', duration: 45, required: false });
-  }
+  input = next;
+  startNow = !focusStart && !input.sample && minutes(input.start) <= minuteNow();
+  if (focusStart && !input.sample) input.start = clock(Math.max(minutes(input.start), minuteNow()));
+  editingPrior = true;
+  if (addTask) input.tasks.push(task());
   edit();
-  if (addTask) $('#task-list .task-row:last-child input[type=text]')?.focus();
+  if (focusStart) $('#start-time').focus();
+  if (addTask) $('#task-list .task-row:last-child input').focus();
 }
 
-function makeQuickPanel() {
-  const panel = document.createElement('section');
-  panel.id = 'quick-panel'; panel.className = 'quick-panel'; panel.hidden = true;
-  const heading = document.createElement('h3'); heading.textContent = 'What changed?';
-  const hint = document.createElement('p'); hint.className = 'hint';
-  hint.textContent = 'Move your saved start later, or use the current time if it has already passed. Your confirmed plan stays saved.';
-  const label = document.createElement('p'); label.className = 'quick-label'; label.textContent = 'I lost more time';
-  const delays = document.createElement('div'); delays.className = 'quick-actions';
-  for (const n of [30, 45, 60]) delays.append(action(`${n} min`, `Move saved start ${n} minutes later and compare`, () => quickReplan(n), 'quick-button'));
-  const finished = document.createElement('div'); finished.id = 'quick-finished';
-  const error = document.createElement('p'); error.id = 'quick-error'; error.className = 'error-box'; error.setAttribute('role', 'alert'); error.hidden = true;
-  const addButton = action('+ Add a task', 'Add a task to the new draft', () => editChangedDay(true), 'quick-button');
-  const editButton = action('Edit details →', 'Edit details', () => editChangedDay(), 'inline-button');
-  panel.append(heading, hint, label, delays, finished, addButton, error, editButton);
-  $('#replan').closest('.stack-actions').after(panel);
-}
-
-function renderQuickFinished() {
-  const host = $('#quick-finished'); host.replaceChildren();
-  const scheduled = new Set(confirmed.plan.blocks.filter(b => b.kind === 'task').map(b => b.id));
-  const tasks = confirmed.input.tasks.filter(t => scheduled.has(t.id) && !confirmed.input.completed.includes(t.id));
-  if (!tasks.length) return;
-  const label = document.createElement('p'); label.className = 'quick-label'; label.textContent = 'I finished a task'; host.append(label);
-  const row = document.createElement('div'); row.className = 'quick-actions';
-  for (const task of tasks) row.append(action(task.title, `Mark ${task.title} finished and compare`, () => quickReplan(0, task.id), 'quick-button'));
-  host.append(row);
-}
-
-makeQuickPanel();
-
-$('#start-own').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
-$('#start-demo').addEventListener('click', () => { input = sample(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
-$('#clear-sample').addEventListener('click', () => { input = fresh(); compareToConfirmed = false; edit(); });
-$('#start-time').addEventListener('input', () => { input.start = $('#start-time').value; });
-$('#end-time').addEventListener('input', () => { input.end = $('#end-time').value; });
-$('#back-home').addEventListener('click', () => confirmed ? showConfirmed() : show('intro'));
-$('#show-saved').addEventListener('click', showConfirmed);
-$('#edit-plan').addEventListener('click', edit);
-for (const b of document.querySelectorAll('[data-add]')) b.addEventListener('click', () => {
-  const kind = b.dataset.add;
-  if (kind === 'tasks') input.tasks.push({ id: uid(), title: '', duration: 45, required: false });
-  else {
-    let begin, limit;
-    try { begin = minutes(input.start); } catch { begin = minutes(nextQuarter()); }
-    try { limit = minutes(input.end); } catch { limit = begin + 30; }
-    input[kind].push({ id: uid(), title: '', start: clock(begin), end: clock(Math.max(begin + 15, Math.min(begin + 30, limit))) });
+function quickReplan(target, finishedId = null) {
+  if (!currentConfirmed()) return showConfirmed();
+  const next = structuredClone(savedPlan().input);
+  const now = next.sample ? minutes(next.start) : minuteNow();
+  const start = target ?? Math.max(now, minutes(next.start));
+  if (start < now) {
+    renderQuick();
+    notice('#quick-error', 'That start time has passed. Choose Start now or set another time.');
+    $('#quick-delays button')?.focus();
+    return;
   }
-  renderRows();
-});
-$('#plan-form').addEventListener('submit', (event) => {
-  event.preventDefault(); input.start = $('#start-time').value; input.end = $('#end-time').value;
+  if (start >= minutes(next.end)) {
+    notice('#quick-error', 'Your start would be after the window ends. Set another start or change the finish time.');
+    return;
+  }
+  next.start = clock(start);
+  if (finishedId) next.completed.push(finishedId);
+  editingPrior = true;
   try {
-    if (!input.sample && input.day !== localDay()) throw new Error('This draft belongs to an earlier day. Start a new day to plan again.');
-    if (!input.sample && minutes(nextQuarter()) >= 1425) throw new Error('There is no 15-minute planning window left today. Start a new day tomorrow.');
-    if (!input.sample && input.day === localDay() && minutes(input.start) < minutes(nextQuarter())) throw new Error(`Your start time has passed. Update it to ${nextQuarter()} or later.`);
-    draft = buildPlans(input); selected = 0; $('#form-error').hidden = true; showResults();
+    compare(next);
+    input = next;
+    startNow = false;
+  } catch (error) {
+    notice('#quick-error', error.message);
   }
-  catch (error) { const box = $('#form-error'); box.textContent = error.message; box.hidden = false; box.scrollIntoView({ block: 'center' }); }
+}
+
+function renderQuick() {
+  const value = savedPlan();
+  const from = minutes(value.input.start);
+  const end = minutes(value.input.end);
+  const now = minuteNow();
+  const targets = $('#quick-delays');
+  targets.replaceChildren();
+  if (!value.input.sample && now >= from && now < end) {
+    targets.append(button('Start now', null, () => quickReplan(minuteNow()), 'button secondary'));
+  }
+  for (const delay of [30, 45, 60]) {
+    const target = from + delay;
+    if (target >= end || (!value.input.sample && target <= now)) continue;
+    targets.append(button(`Start at ${timeLabel(target)} (+${delay} min)`, null, () => quickReplan(target), 'button secondary'));
+  }
+  const host = $('#quick-finished');
+  host.replaceChildren();
+  const scheduled = value.plan.blocks.filter(b => b.kind === 'task' && !value.input.completed.includes(b.id));
+  if (!scheduled.length) return;
+  const heading = document.createElement('h3');
+  heading.textContent = 'Mark a task finished and replan';
+  const controls = document.createElement('div');
+  controls.className = 'quick-actions';
+  for (const item of scheduled) {
+    controls.append(button(item.title, `Mark ${item.title} finished and compare`, () => quickReplan(null, item.id), 'button secondary'));
+  }
+  host.append(heading, controls);
+}
+
+$('#home-link').addEventListener('click', event => {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  showHome();
 });
-$('#choose-plan').addEventListener('click', () => { const p = draft?.plans[selected]; if (!p) return; $('#dialog-summary').textContent = planLabel(p); $('#confirm-dialog').showModal(); });
-$('#confirm-dialog').addEventListener('close', () => {
-  if ($('#confirm-dialog').returnValue !== 'confirm' || !draft) return;
-  const value = { input: copy(input), plan: copy(draft.plans[selected]), at: new Date().toISOString() };
-  if (!save(value)) { showNotice('This browser could not save your plan. Please allow site storage and try again.'); return; }
-  confirmed = value; editingAfterConfirm = false; showConfirmed();
+$('#start-own').addEventListener('click', startPersonal);
+$('#new-day').addEventListener('click', startPersonal);
+$('#clear-sample').addEventListener('click', startPersonal);
+$('#start-demo').addEventListener('click', startSample);
+$('#confirmed-sample').addEventListener('click', startSample);
+$('#resume-plan').addEventListener('click', () => {
+  input = structuredClone(confirmed.personal.input);
+  showConfirmed();
+});
+$('#back-confirmed').addEventListener('click', showConfirmed);
+$('#show-saved').addEventListener('click', showConfirmed);
+$('#edit-plan').addEventListener('click', () => {
+  input = structuredClone(draft.input);
+  edit();
+});
+$('#start-now').addEventListener('change', event => setStartMode(event.target.checked));
+$('#use-current').addEventListener('click', () => {
+  setStartMode(true);
+  $('#start-now').focus();
+});
+$('#start-time').addEventListener('input', event => {
+  input.start = event.target.value;
+  event.target.removeAttribute('aria-invalid');
+  $('#start-error').hidden = true;
+});
+$('#end-time').addEventListener('input', event => input.end = event.target.value);
+for (const add of document.querySelectorAll('[data-add]')) {
+  add.addEventListener('click', () => {
+    const kind = add.dataset.add;
+    if (kind === 'tasks') input.tasks.push(task());
+    else {
+      const start = startNow || !input.start ? minuteNow() : minutes(input.start);
+      input[kind].push({
+        id: crypto.randomUUID(), title: '', start: clock(Math.min(start, 1438)),
+        end: clock(Math.min(1439, start + (kind === 'protected' ? 10 : 30))),
+      });
+    }
+    renderRows();
+    focusRow($(`#${kind === 'tasks' ? 'task' : kind}-list`), input[kind].length - 1, add);
+  });
+}
+$('#plan-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const now = new Date();
+  if (!input.sample && input.day !== localDay(now)) {
+    notice('#form-error', 'This draft belongs to an earlier day. Return home to start today’s plan.');
+    $('#form-error').focus();
+    return;
+  }
+  if (startNow) {
+    input.start = clock(minuteNow(now));
+    $('#start-time').value = input.start;
+  }
+  if (!input.sample && input.start && minutes(input.start) < minuteNow(now)) {
+    $('#start-error-text').textContent = 'That start time has passed.';
+    $('#start-error').hidden = false;
+    $('#start-time').setAttribute('aria-invalid', 'true');
+    $('#start-time').focus();
+    return;
+  }
+  try {
+    compare(input);
+  } catch (error) {
+    notice('#form-error', error.message);
+    $('#form-error').focus();
+  }
+});
+
+$('#choose-plan').addEventListener('click', () => {
+  const plan = draft?.plans[selected];
+  if (!plan) return;
+  const replacing = !draft.input.sample && stored ? ' This replaces the plan stored in this browser.' : '';
+  $('#dialog-summary').textContent = `Keep ${titles([...plan.required, ...plan.kept]) || 'the time open'}. Move to later: ${titles(plan.deferred) || 'nothing'}. ${openLabel(plan)}.${replacing}`;
+  const dialog = $('#confirm-dialog');
+  dialog.returnValue = '';
+  dialog.showModal();
+});
+$('#confirm-dialog').addEventListener('close', async () => {
+  if ($('#confirm-dialog').returnValue !== 'confirm' || !draft || saving) return;
+  if (!draft.input.sample && draft.input.day !== localDay()) {
+    notice('#results-error', 'This draft is from an earlier day. Return home to start today’s plan.');
+    $('#results-error').focus();
+    return;
+  }
+  const plan = draft.plans[selected];
+  const pending = draft;
+  const value = { input: draft.input, plan, at: new Date().toISOString() };
+  if (draft.previous) value.lastChange = changeSummary(draft.previous, draft.input, plan);
+  saving = true;
+  $('#choose-plan').disabled = true;
+  try {
+    if (!value.input.sample) await savePersonal(value);
+  } catch (error) {
+    const message = error.name === 'Error' ? error.message : 'This browser could not save your plan. Allow site storage and try again.';
+    notice('#results-error', message);
+    $('#results-error').focus();
+    return;
+  } finally {
+    saving = false;
+    $('#choose-plan').disabled = false;
+  }
+  confirmed[value.input.sample ? 'sample' : 'personal'] = value;
+  if (pending !== draft || $('#results').hidden) return;
+  input = structuredClone(draft.input);
+  draft = null;
+  showConfirmed();
 });
 $('#replan').addEventListener('click', () => {
-  renderQuickFinished();
-  const panel = $('#quick-panel'); panel.hidden = !panel.hidden;
-  $('#quick-error').hidden = true;
-  if (!panel.hidden) panel.querySelector('.quick-button')?.focus();
+  if (!currentConfirmed()) return showConfirmed();
+  const panel = $('#quick-panel');
+  panel.hidden = !panel.hidden;
+  $('#replan').setAttribute('aria-expanded', String(!panel.hidden));
+  notice('#quick-error', '');
+  if (!panel.hidden) {
+    renderQuick();
+    ($('#quick-delays button') || $('#set-start')).focus();
+  }
 });
-$('#view-alternatives').addEventListener('click', () => { input = copy(confirmed.input); compareToConfirmed = true; draft = buildPlans(input); selected = draft.plans.findIndex(p => p.title === confirmed.plan.title); if (selected < 0) selected = 0; showResults(); });
-$('#new-day').addEventListener('click', () => { input = fresh(); editingAfterConfirm = false; compareToConfirmed = false; edit(); });
+$('#set-start').addEventListener('click', () => editConfirmed({ focusStart: true }));
+$('#quick-add').addEventListener('click', () => editConfirmed({ addTask: true }));
+$('#quick-edit').addEventListener('click', () => editConfirmed());
+$('#view-alternatives').addEventListener('click', () => {
+  const value = savedPlan();
+  const next = structuredClone(value.input);
+  if (!currentConfirmed()) return showConfirmed();
+  if (!next.sample) next.start = clock(Math.max(minuteNow(), minutes(next.start)));
+  editingPrior = true;
+  try {
+    compare(next);
+    input = next;
+    startNow = false;
+    const match = draft.plans.findIndex(plan => plan.title === value.plan.title);
+    if (match >= 0) {
+      selected = match;
+      renderSelection();
+    }
+  } catch {
+    editConfirmed();
+    $('#plan-form').requestSubmit();
+  }
+});
 load();
