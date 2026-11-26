@@ -40,7 +40,8 @@ export function changeSummary(previous, input, plan) {
 export function renderTimeline(axis, list, input, plan, previous = null) {
   const start = minutes(input.start);
   const end = minutes(input.end);
-  const origin = previous ? Math.min(minutes(previous.input.start), start) : start;
+  const previousStart = previous ? minutes(previous.input.start) : start;
+  const origin = Math.min(previousStart, start);
   const limit = previous ? Math.max(minutes(previous.input.end), end) : end;
   const timing = timelineDetails(plan.blocks, start, end);
   const entries = [...timing.blocks, ...timing.openIntervals.map(([a, b]) => ({
@@ -49,9 +50,12 @@ export function renderTimeline(axis, list, input, plan, previous = null) {
 
   const scale = document.createElement('div');
   scale.className = 'axis-scale';
-  for (const at of [origin, limit]) {
+  for (const text of [
+    origin < start ? `Previous start · ${timeLabel(origin)}` : timeLabel(origin),
+    end < limit ? `Previous finish · ${timeLabel(limit)}` : timeLabel(limit),
+  ]) {
     const label = document.createElement('span');
-    label.textContent = timeLabel(at);
+    label.textContent = text;
     scale.append(label);
   }
 
@@ -68,24 +72,30 @@ export function renderTimeline(axis, list, input, plan, previous = null) {
 
   const caption = document.createElement('p');
   caption.className = 'axis-caption';
-  if (previous && previous.input.start !== input.start) {
+  const shifted = previousStart !== start;
+  caption.hidden = !shifted;
+  if (shifted) {
     const marker = document.createElement('span');
     marker.className = 'start-marker';
-    marker.style.left = `${100 * (Math.max(start, minutes(previous.input.start)) - origin) / (limit - origin)}%`;
+    marker.style.left = `${100 * (start - origin) / (limit - origin)}%`;
     track.append(marker);
-    caption.textContent = `Previous start ${timeLabel(previous.input.start)} · New start ${timeLabel(start)}`;
+    caption.textContent = start < previousStart
+      ? `This plan starts at ${timeLabel(start)} · Previously ${timeLabel(previousStart)}`
+      : `This plan starts at ${timeLabel(start)}`;
   }
 
   const legend = document.createElement('div');
   legend.className = 'legend';
-  for (const [kind, label] of [['task', 'Task'], ['fixed', 'Fixed'], ['protected', 'Protected'], ['open', 'Open']]) {
-    if (!entries.some(b => b.kind === kind)) continue;
+  const legendItems = [['task', 'Task'], ['fixed', 'Fixed'], ['protected', 'Protected'], ['open', 'Open']]
+    .filter(([kind]) => entries.some(block => block.kind === kind));
+  if (origin < start || end < limit) legendItems.push(['outside', 'Outside this plan']);
+  for (const [kind, label] of legendItems) {
     const item = document.createElement('span');
     item.className = kind;
     item.textContent = label;
     legend.append(item);
   }
-  axis.replaceChildren(scale, track, caption, legend);
+  axis.replaceChildren(caption, scale, track, legend);
   list.replaceChildren();
   for (const block of entries) {
     const row = document.createElement('li');

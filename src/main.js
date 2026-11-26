@@ -307,6 +307,19 @@ function renderResults() {
     : `${draft.available} min available${draft.plans.length === 1 ? ' · One option fits' : ''}`;
   notice('#results-warning', draft.impossible.length ? `Cannot fit today: ${draft.impossible.join(', ')}.` : '');
   $('#back-confirmed').hidden = !savedPlan();
+  const commitments = draft.plans[0].blocks.filter(block => block.kind === 'fixed' || block.kind === 'protected');
+  $('#shared-time').hidden = commitments.length === 0;
+  const sharedTime = $('#shared-time-list');
+  sharedTime.replaceChildren();
+  for (const block of commitments) {
+    const item = document.createElement('li');
+    const name = document.createElement('strong');
+    const time = document.createElement('span');
+    name.textContent = block.title;
+    time.textContent = `${timeLabel(block.start)}–${timeLabel(block.end)} · ${block.kind === 'fixed' ? 'Fixed' : 'Protected'}`;
+    item.append(name, time);
+    sharedTime.append(item);
+  }
   const list = $('#option-list');
   list.replaceChildren();
   draft.plans.forEach((plan, index) => {
